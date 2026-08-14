@@ -298,8 +298,8 @@
                 <p>現在 <span id="viewerCount" style="font-weight: bold; color: var(--primary-color);">0</span> 人が視聴中</p>
                 
                 <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
-                    <button id="btnMic" onclick="toggleMic()">マイク ON</button>
-                    <button id="btnVideo" onclick="toggleVideo()">映像(OBS) ON</button>
+                    <button id="btnMic" onclick="toggleMic()">マイク OFF</button>
+                    <button id="btnVideo" onclick="toggleVideo()">映像(OBS) OFF</button>
                     <button class="danger" onclick="endBroadcast()">配信終了</button>
                 </div>
                 
@@ -351,6 +351,18 @@
             document.getElementById('broadcasterTabs').classList.remove('hidden');
         }
 
+        // 別タブでの変更（枠の追加やステータス変更）を即時反映する
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'takaneko_slots') {
+                slots = JSON.parse(e.newValue) || [];
+                renderSlots();
+            }
+            if (e.key === 'takaneko_theme') {
+                document.body.setAttribute('data-theme', e.newValue || 'light');
+            }
+        });
+
+        // URL共有処理
         const urlParams = new URLSearchParams(window.location.search);
         const sharedSlotId = urlParams.get('watch');
         if (sharedSlotId) {
@@ -376,7 +388,6 @@
             const isDark = document.body.getAttribute('data-theme') === 'dark';
             const newTheme = isDark ? 'light' : 'dark';
             
-            // テーマの切り替えと保存
             document.body.setAttribute('data-theme', newTheme);
             localStorage.setItem('takaneko_theme', newTheme);
 
@@ -397,9 +408,8 @@
                 const tabs = document.getElementById('broadcasterTabs');
                 tabs.classList.remove('hidden');
                 
-                // 再アニメーションのためにクラスをリセット
                 tabs.classList.remove('fade-in');
-                void tabs.offsetWidth; // リフロー強制
+                void tabs.offsetWidth;
                 tabs.classList.add('fade-in');
                 
                 alert('配信者モードが有効になりました。');
@@ -424,7 +434,6 @@
                 document.getElementById('tabViewer').classList.add('active');
                 document.getElementById('tabBroadcaster').classList.remove('active');
                 
-                // アニメーションのリセット
                 viewerUI.classList.remove('fade-in');
                 void viewerUI.offsetWidth;
                 viewerUI.classList.add('fade-in');
@@ -434,7 +443,6 @@
                 document.getElementById('tabViewer').classList.remove('active');
                 document.getElementById('tabBroadcaster').classList.add('active');
                 
-                // アニメーションのリセット
                 broadcasterUI.classList.remove('fade-in');
                 void broadcasterUI.offsetWidth;
                 broadcasterUI.classList.add('fade-in');
@@ -504,8 +512,6 @@
 
             slots.forEach((slot, index) => {
                 const infoHtml = `<strong>${slot.title}</strong><br><small>${new Date(slot.time).toLocaleString()}</small><br><span class="countdown" id="cd-${slot.id}"></span>`;
-                
-                // アニメーションを少しずつずらす
                 const delay = `${index * 0.05}s`;
 
                 // 視聴者用UI構築
@@ -605,7 +611,6 @@
             
             const playerCard = document.getElementById('playerCard');
             playerCard.classList.remove('hidden');
-            // アニメーションリセット
             playerCard.classList.remove('slide-up');
             void playerCard.offsetWidth;
             playerCard.classList.add('slide-up');
@@ -694,6 +699,53 @@
             });
         }
 
+        // ==========================================
+        //  バックグラウンド監視（自動切り替え機能）
+        // ==========================================
+        setInterval(() => {
+            const isViewerMode = document.getElementById('tabViewer').classList.contains('active');
+            
+            // 視聴モードであり、現在まだプレイヤー画面を開いていない(何も視聴していない)場合のみチェック
+            if (isViewerMode && !currentWatchingId) {
+                slots.forEach(slot => {
+                    if (slot.status === 'waiting') {
+                        checkIfLive(slot);
+                    }
+                });
+            }
+        }, 5000); // 5秒ごとにチェック
+
+        function checkIfLive(slot) {
+            const checkerPeer = new Peer();
+            checkerPeer.on('open', () => {
+                // 生存確認用の特別なメタデータを付けて接続
+                const conn = checkerPeer.connect(PREFIX + slot.id, { metadata: { isPing: true } });
+                
+                conn.on('open', () => {
+                    // 配信者がオンライン（配信開始している）ことを検知！
+                    slot.status = 'live';
+                    saveSlots();
+                    renderSlots();
+                    
+                    // プレイヤー画面を自動で開く
+                    watchSlot(slot.id);
+                    
+                    conn.close();
+                    checkerPeer.destroy();
+                });
+                
+                checkerPeer.on('error', () => {
+                    checkerPeer.destroy();
+                });
+                
+                // タイムアウト処理（オンラインでなければ3秒で破棄）
+                setTimeout(() => {
+                    if (!checkerPeer.destroyed) checkerPeer.destroy();
+                }, 3000);
+            });
+        }
+
+
         function setViewerPreference(pref) {
             viewerWantsVideo = (pref === 'video');
             
@@ -717,7 +769,6 @@
                 if (viewerWantsVideo) {
                     if(v.classList.contains('hidden')) {
                         v.classList.remove('hidden');
-                        // Video表示時のアニメーション
                         v.style.animation = 'none';
                         void v.offsetWidth;
                         v.style.animation = 'fadeIn 0.5s ease-out';
@@ -794,6 +845,14 @@
                 activeConnections = [];
 
                 hostPeer.on('connection', conn => {
+                    // 自動切り替えの生存確認(Ping)からの接続だった場合は、カウントせずにすぐ切断する
+                    if (conn.metadata && conn.metadata.isPing) {
+                        conn.on('open', () => {
+                            setTimeout(() => conn.close(), 500);
+                        });
+                        return;
+                    }
+
                     activeConnections.push(conn);
                     document.getElementById('viewerCount').innerText = activeConnections.length;
 
