@@ -110,7 +110,6 @@
             transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
         }
 
-        /* hiddenクラスをアニメーション対応に（JSで付け外しする際にdisplay:noneがパッと消えないように配慮） */
         .hidden { 
             display: none !important; 
         }
@@ -124,7 +123,7 @@
             justify-content: center;
             align-items: center;
             z-index: 1000;
-            backdrop-filter: blur(3px); /* ぼかし効果 */
+            backdrop-filter: blur(3px);
             animation: fadeIn 0.2s ease-out;
         }
         .modal-content {
@@ -342,6 +341,12 @@
         let hostHasVideo = false; 
         let viewerWantsVideo = true; 
 
+        // 初期化時にテーマを復元
+        const savedTheme = localStorage.getItem('takaneko_theme');
+        if (savedTheme === 'dark') {
+            document.body.setAttribute('data-theme', 'dark');
+        }
+
         if (isBroadcasterAuthenticated) {
             document.getElementById('broadcasterTabs').classList.remove('hidden');
         }
@@ -369,7 +374,11 @@
         let toggleTimer = null;
         document.getElementById('themeToggleBtn').addEventListener('click', () => {
             const isDark = document.body.getAttribute('data-theme') === 'dark';
-            document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+            const newTheme = isDark ? 'light' : 'dark';
+            
+            // テーマの切り替えと保存
+            document.body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('takaneko_theme', newTheme);
 
             toggleCount++;
             clearTimeout(toggleTimer);
