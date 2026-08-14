@@ -351,7 +351,7 @@
             document.getElementById('broadcasterTabs').classList.remove('hidden');
         }
 
-        // 別タブでの変更（枠の追加やステータス変更）を即時反映する
+        // 別タブでの変更を即時反映する
         window.addEventListener('storage', (e) => {
             if (e.key === 'takaneko_slots') {
                 slots = JSON.parse(e.newValue) || [];
@@ -518,13 +518,28 @@
                 const vItem = document.createElement('div');
                 vItem.className = 'slot-item';
                 vItem.style.animationDelay = delay;
-                vItem.innerHTML = `<div>${infoHtml}</div>`;
+                
+                const vInfoDiv = document.createElement('div');
+                vInfoDiv.innerHTML = infoHtml;
+                vItem.appendChild(vInfoDiv);
+                
+                const vBtnGroup = document.createElement('div');
                 if (slot.status !== 'ended') {
                     const vBtn = document.createElement('button');
                     vBtn.innerText = '視聴する';
                     vBtn.onclick = () => watchSlot(slot.id);
-                    vItem.appendChild(vBtn);
+                    vBtnGroup.appendChild(vBtn);
                 }
+                
+                // 視聴側からの削除ボタン
+                const vDelBtn = document.createElement('button');
+                vDelBtn.innerText = '削除';
+                vDelBtn.className = 'danger';
+                vDelBtn.style.marginLeft = '10px';
+                vDelBtn.onclick = () => deleteSlot(slot.id);
+                vBtnGroup.appendChild(vDelBtn);
+                
+                vItem.appendChild(vBtnGroup);
                 vList.appendChild(vItem);
 
                 // 配信者用UI構築
@@ -705,7 +720,6 @@
         setInterval(() => {
             const isViewerMode = document.getElementById('tabViewer').classList.contains('active');
             
-            // 視聴モードであり、現在まだプレイヤー画面を開いていない(何も視聴していない)場合のみチェック
             if (isViewerMode && !currentWatchingId) {
                 slots.forEach(slot => {
                     if (slot.status === 'waiting') {
@@ -713,23 +727,18 @@
                     }
                 });
             }
-        }, 5000); // 5秒ごとにチェック
+        }, 5000); 
 
         function checkIfLive(slot) {
             const checkerPeer = new Peer();
             checkerPeer.on('open', () => {
-                // 生存確認用の特別なメタデータを付けて接続
                 const conn = checkerPeer.connect(PREFIX + slot.id, { metadata: { isPing: true } });
                 
                 conn.on('open', () => {
-                    // 配信者がオンライン（配信開始している）ことを検知！
                     slot.status = 'live';
                     saveSlots();
                     renderSlots();
-                    
-                    // プレイヤー画面を自動で開く
                     watchSlot(slot.id);
-                    
                     conn.close();
                     checkerPeer.destroy();
                 });
@@ -738,20 +747,16 @@
                     checkerPeer.destroy();
                 });
                 
-                // タイムアウト処理（オンラインでなければ3秒で破棄）
                 setTimeout(() => {
                     if (!checkerPeer.destroyed) checkerPeer.destroy();
                 }, 3000);
             });
         }
 
-
         function setViewerPreference(pref) {
             viewerWantsVideo = (pref === 'video');
-            
             document.getElementById('btnWatchVideo').style.opacity = viewerWantsVideo ? '1' : '0.5';
             document.getElementById('btnWatchAudio').style.opacity = !viewerWantsVideo ? '1' : '0.5';
-            
             applyViewerMediaSettings();
         }
 
@@ -819,6 +824,7 @@
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
                 
+                // 初期状態OFF
                 localStream.getAudioTracks().forEach(t => t.enabled = false);
                 localStream.getVideoTracks().forEach(t => t.enabled = false);
                 isMicOn = false;
@@ -845,11 +851,8 @@
                 activeConnections = [];
 
                 hostPeer.on('connection', conn => {
-                    // 自動切り替えの生存確認(Ping)からの接続だった場合は、カウントせずにすぐ切断する
                     if (conn.metadata && conn.metadata.isPing) {
-                        conn.on('open', () => {
-                            setTimeout(() => conn.close(), 500);
-                        });
+                        conn.on('open', () => setTimeout(() => conn.close(), 500));
                         return;
                     }
 
@@ -869,7 +872,7 @@
                 });
 
             } catch (err) {
-                alert('カメラまたはマイクの取得に失敗しました。\nOBSの「仮想カメラ」が開始されているか、ブラウザの権限を確認してください。\n詳細: ' + err.message);
+                alert('カメラまたはマイクの取得に失敗しました。\n詳細: ' + err.message);
             }
         }
 
