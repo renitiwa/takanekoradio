@@ -56,8 +56,12 @@
 
         h1 { margin: 0; font-size: 1.5rem; }
 
-        button {
+        button, select {
             font-family: 'KeiFont', sans-serif;
+            font-size: 1rem;
+        }
+        
+        button {
             background-color: var(--primary-color);
             color: white;
             border: none;
@@ -65,7 +69,6 @@
             border-radius: 4px;
             cursor: pointer;
             transition: background-color 0.2s ease, transform 0.1s ease;
-            font-size: 1rem;
         }
         button:hover { background-color: var(--primary-hover); transform: translateY(-1px); }
         button:active { transform: translateY(1px); }
@@ -213,18 +216,37 @@
         }
         
         /* フォーム要素 */
-        input[type="text"], input[type="datetime-local"] {
+        input[type="text"], input[type="datetime-local"], select {
             border: 1px solid var(--border-color);
             border-radius: 4px;
             background-color: var(--bg-color);
             color: var(--text-color);
             transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
-        input[type="text"]:focus, input[type="datetime-local"]:focus {
+        input[type="text"]:focus, input[type="datetime-local"]:focus, select:focus {
             outline: none;
             border-color: var(--primary-color);
             box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
         }
+
+        select {
+            padding: 0.5rem;
+            width: 100%;
+            margin-bottom: 1rem;
+            box-sizing: border-box;
+            appearance: none; /* デフォルトの矢印を消す（任意） */
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23333333%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat;
+            background-position: right .7em top 50%;
+            background-size: .65em auto;
+        }
+        /* ダークモード時のセレクトボックスの矢印色調整 */
+        [data-theme="dark"] select {
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23e0e0e0%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+        }
+
     </style>
 </head>
 <body>
@@ -275,7 +297,19 @@
 
         <!-- ================= 配信モードUI ================= -->
         <div id="broadcasterUI" class="hidden fade-in">
+            <!-- デバイス設定エリア -->
             <div class="card slide-up">
+                <h2>配信設定</h2>
+                <p style="margin-top: 0; font-size: 0.9rem; color: gray;">配信に使用するマイクを選んでください。（リストが出ない場合は「許可」ボタンを押してください）</p>
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+                     <button onclick="requestDevicePermissions()" class="success" id="btnRequestPerm">マイク/カメラを許可してリストを更新</button>
+                </div>
+                <select id="micSelect">
+                    <option value="">マイクを選択してください...</option>
+                </select>
+            </div>
+
+            <div class="card slide-up" style="animation-delay: 0.05s;">
                 <h2>新しい配信枠を作成</h2>
                 <div style="margin-bottom: 10px;">
                     <input type="text" id="slotTitle" placeholder="配信タイトル" style="font-family: inherit; padding: 5px; width: 100%; box-sizing: border-box; margin-bottom: 10px;">
@@ -349,6 +383,8 @@
 
         if (isBroadcasterAuthenticated) {
             document.getElementById('broadcasterTabs').classList.remove('hidden');
+            // デバイスリストの初期取得を試みる
+            getConnectedDevices();
         }
 
         // 別タブでの変更を即時反映する
@@ -414,6 +450,7 @@
                 
                 alert('配信者モードが有効になりました。');
                 closeModal();
+                getConnectedDevices(); // パスワード認証後にもデバイス取得を試みる
             } else {
                 alert('パスワードが違います。');
             }
@@ -446,9 +483,80 @@
                 broadcasterUI.classList.remove('fade-in');
                 void broadcasterUI.offsetWidth;
                 broadcasterUI.classList.add('fade-in');
+                
+                // 配信モードに切り替えた時にデバイスリストを更新
+                getConnectedDevices();
             }
             renderSlots();
         }
+
+        // ==========================================
+        //         デバイス（マイク）取得処理
+        // ==========================================
+        async function requestDevicePermissions() {
+            try {
+                // デバイスのラベル（名前）を取得するためには、一度ストリームを取得して許可を得る必要がある
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // 許可が取れたらすぐにストリームを閉じる
+                stream.getTracks().forEach(track => track.stop());
+                
+                // 許可が取れた状態でもう一度デバイスリストを取得
+                getConnectedDevices();
+                
+                const btn = document.getElementById('btnRequestPerm');
+                btn.innerText = '許可済み';
+                btn.style.backgroundColor = 'gray';
+                btn.disabled = true;
+                
+            } catch (err) {
+                alert('マイクのアクセス許可が得られませんでした。\nブラウザの設定を確認してください。');
+                console.error(err);
+            }
+        }
+
+        async function getConnectedDevices() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioInputDevices = devices.filter(device => device.kind === 'audioinput');
+                
+                const micSelect = document.getElementById('micSelect');
+                
+                // 現在の選択を保存しておく
+                const currentVal = micSelect.value;
+                
+                micSelect.innerHTML = ''; // リストをクリア
+                
+                if (audioInputDevices.length === 0) {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.text = 'マイクが見つかりません';
+                    micSelect.appendChild(option);
+                    return;
+                }
+
+                audioInputDevices.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    // デバイス名が空の場合はデフォルトの名前をつける（許可前は空になることが多い）
+                    option.text = device.label || `マイク ${index + 1}`;
+                    micSelect.appendChild(option);
+                });
+                
+                // 以前の選択があれば復元
+                if (currentVal && Array.from(micSelect.options).some(opt => opt.value === currentVal)) {
+                    micSelect.value = currentVal;
+                }
+
+            } catch (err) {
+                console.error('デバイスの取得に失敗:', err);
+            }
+        }
+        
+        // デバイスの接続状況が変わったら自動更新
+        navigator.mediaDevices.ondevicechange = (event) => {
+            getConnectedDevices();
+        }
+        // ==========================================
 
         function createSlot(isImmediate) {
             const title = document.getElementById('slotTitle').value;
@@ -531,7 +639,6 @@
                     vBtnGroup.appendChild(vBtn);
                 }
                 
-                // 視聴側からの削除ボタン
                 const vDelBtn = document.createElement('button');
                 vDelBtn.innerText = '削除';
                 vDelBtn.className = 'danger';
@@ -820,9 +927,16 @@
         // ==========================================
         async function startBroadcast(id) {
             const slot = slots.find(s => s.id === id);
+            const selectedMicId = document.getElementById('micSelect').value;
             
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                // 選択されたマイクデバイスIDを使用してストリームを取得
+                const constraints = {
+                    video: true,
+                    audio: selectedMicId ? { deviceId: { exact: selectedMicId } } : true
+                };
+                
+                localStream = await navigator.mediaDevices.getUserMedia(constraints);
                 
                 // 初期状態OFF
                 localStream.getAudioTracks().forEach(t => t.enabled = false);
