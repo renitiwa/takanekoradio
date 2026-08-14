@@ -41,7 +41,7 @@
             color: var(--text-color);
             margin: 0;
             padding: 0;
-            transition: background-color 0.3s, color 0.3s;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
         header {
@@ -51,6 +51,7 @@
             padding: 1rem 2rem;
             background-color: var(--card-bg);
             border-bottom: 1px solid var(--border-color);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
 
         h1 { margin: 0; font-size: 1.5rem; }
@@ -63,20 +64,40 @@
             padding: 0.5rem 1rem;
             border-radius: 4px;
             cursor: pointer;
-            transition: background-color 0.2s;
+            transition: background-color 0.2s ease, transform 0.1s ease;
             font-size: 1rem;
         }
-        button:hover { background-color: var(--primary-hover); }
+        button:hover { background-color: var(--primary-hover); transform: translateY(-1px); }
+        button:active { transform: translateY(1px); }
         button.danger { background-color: var(--danger-color); }
         button.danger:hover { background-color: var(--danger-hover); }
         button.success { background-color: var(--success-color); }
         button.success:hover { background-color: var(--success-hover); }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
         .container {
             max-width: 800px;
             margin: 2rem auto;
             padding: 0 1rem;
+        }
+
+        /* アニメーション用の基本クラス */
+        .fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+        
+        .slide-up {
+            animation: slideUp 0.4s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .card {
@@ -86,9 +107,13 @@
             padding: 1.5rem;
             margin-bottom: 1rem;
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
         }
 
-        .hidden { display: none !important; }
+        /* hiddenクラスをアニメーション対応に（JSで付け外しする際にdisplay:noneがパッと消えないように配慮） */
+        .hidden { 
+            display: none !important; 
+        }
 
         /* モーダル */
         .modal {
@@ -99,12 +124,16 @@
             justify-content: center;
             align-items: center;
             z-index: 1000;
+            backdrop-filter: blur(3px); /* ぼかし効果 */
+            animation: fadeIn 0.2s ease-out;
         }
         .modal-content {
             background-color: var(--card-bg);
             padding: 2rem;
             border-radius: 8px;
             text-align: center;
+            animation: slideUp 0.3s ease-out;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
         }
         .modal-content input {
             font-family: 'KeiFont', sans-serif;
@@ -112,6 +141,10 @@
             font-size: 1rem;
             margin: 1rem 0;
             width: 80%;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
         }
 
         /* 配信枠リスト */
@@ -123,9 +156,10 @@
             align-items: center;
             flex-wrap: wrap;
             gap: 10px;
+            animation: fadeIn 0.3s ease-out;
         }
         .slot-item:last-child { border-bottom: none; }
-        .countdown { font-weight: bold; color: var(--primary-color); }
+        .countdown { font-weight: bold; color: var(--primary-color); transition: color 0.3s ease; }
         .live-text { font-weight: bold; color: var(--danger-color); animation: blink 1.5s infinite; }
         
         .empty-message {
@@ -133,6 +167,7 @@
             color: gray;
             padding: 2rem 1rem;
             line-height: 1.6;
+            animation: fadeIn 0.5s ease-out;
         }
 
         @keyframes blink {
@@ -153,8 +188,13 @@
             justify-content: center;
             align-items: center;
             min-height: 50px;
+            transition: min-height 0.3s ease;
         }
-        video, audio { width: 100%; display: block; }
+        video, audio { 
+            width: 100%; 
+            display: block; 
+            animation: fadeIn 0.5s ease-out;
+        }
         
         .nav-tabs {
             display: flex;
@@ -165,11 +205,26 @@
             background: transparent;
             color: var(--text-color);
             border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
         }
         .nav-tabs button.active {
             background: var(--primary-color);
             color: white;
             border-color: var(--primary-color);
+        }
+        
+        /* フォーム要素 */
+        input[type="text"], input[type="datetime-local"] {
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        input[type="text"]:focus, input[type="datetime-local"]:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
         }
     </style>
 </head>
@@ -178,29 +233,29 @@
     <header>
         <h1>たかねこラジオ</h1>
         <div>
-            <button id="themeToggleBtn">🌙 ダークモード切替</button>
+            <button id="themeToggleBtn">ダークモード切替</button>
         </div>
     </header>
 
     <div class="container">
         <!-- 配信者用タブ -->
-        <div id="broadcasterTabs" class="nav-tabs hidden">
+        <div id="broadcasterTabs" class="nav-tabs hidden fade-in">
             <button id="tabViewer" class="active" onclick="switchMode('viewer')">視聴モード</button>
             <button id="tabBroadcaster" onclick="switchMode('broadcaster')">配信モード</button>
         </div>
 
         <!-- ================= 視聴モードUI ================= -->
-        <div id="viewerUI">
-            <div class="card">
+        <div id="viewerUI" class="fade-in">
+            <div class="card slide-up">
                 <h2>配信予定 / 配信中</h2>
                 <div id="slotListViewer"></div>
             </div>
 
-            <div id="playerCard" class="card hidden">
+            <div id="playerCard" class="card hidden slide-up">
                 <h2 id="playerTitle">配信タイトル</h2>
                 <div id="playerCountdown" class="countdown hidden"></div>
                 
-                <p id="playerStatus" style="margin-top: 10px; font-weight: bold; color: var(--primary-color);"></p>
+                <p id="playerStatus" style="margin-top: 10px; font-weight: bold; color: var(--primary-color); transition: color 0.3s ease;"></p>
                 
                 <div id="mediaPlayerContainer">
                     <video id="liveVideo" controls autoplay playsinline class="hidden"></video>
@@ -208,11 +263,11 @@
                 </div>
                 
                 <!-- 視聴者用コントロール -->
-                <div id="viewerControls" class="hidden" style="margin-top: 10px;">
-                    <div id="viewerMediaToggle" class="hidden" style="margin-bottom: 10px; padding: 10px; background: var(--bg-color); border-radius: 4px;">
+                <div id="viewerControls" class="hidden fade-in" style="margin-top: 10px;">
+                    <div id="viewerMediaToggle" class="hidden" style="margin-bottom: 10px; padding: 10px; background: var(--bg-color); border-radius: 4px; transition: background-color 0.3s ease;">
                         <p style="margin: 0 0 5px 0; font-size: 0.9rem;">この配信は映像があります。再生方法を選んでください：</p>
-                        <button id="btnWatchVideo" onclick="setViewerPreference('video')" class="active">📺 映像＋音声で視聴</button>
-                        <button id="btnWatchAudio" onclick="setViewerPreference('audio')">🎧 音声のみで視聴(通信量節約)</button>
+                        <button id="btnWatchVideo" onclick="setViewerPreference('video')" class="active">映像＋音声で視聴</button>
+                        <button id="btnWatchAudio" onclick="setViewerPreference('audio')">音声のみで視聴</button>
                     </div>
                     <button class="danger" onclick="stopWatching()">視聴をやめる</button>
                 </div>
@@ -220,8 +275,8 @@
         </div>
 
         <!-- ================= 配信モードUI ================= -->
-        <div id="broadcasterUI" class="hidden">
-            <div class="card">
+        <div id="broadcasterUI" class="hidden fade-in">
+            <div class="card slide-up">
                 <h2>新しい配信枠を作成</h2>
                 <div style="margin-bottom: 10px;">
                     <input type="text" id="slotTitle" placeholder="配信タイトル" style="font-family: inherit; padding: 5px; width: 100%; box-sizing: border-box; margin-bottom: 10px;">
@@ -233,24 +288,24 @@
                 </div>
             </div>
 
-            <div class="card">
+            <div class="card slide-up" style="animation-delay: 0.1s;">
                 <h2>管理中の枠</h2>
                 <div id="slotListBroadcaster"></div>
             </div>
 
             <!-- 配信コントロール -->
-            <div id="broadcastControls" class="card hidden">
+            <div id="broadcastControls" class="card hidden slide-up">
                 <h2 id="activeSlotTitle">配信中: </h2>
                 <p>現在 <span id="viewerCount" style="font-weight: bold; color: var(--primary-color);">0</span> 人が視聴中</p>
                 
                 <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
-                    <button id="btnMic" onclick="toggleMic()">🎤 マイクON</button>
-                    <button id="btnVideo" onclick="toggleVideo()">📺 映像(OBS) ON</button>
-                    <button class="danger" onclick="endBroadcast()">⏹ 配信終了</button>
+                    <button id="btnMic" onclick="toggleMic()">マイク ON</button>
+                    <button id="btnVideo" onclick="toggleVideo()">映像(OBS) ON</button>
+                    <button class="danger" onclick="endBroadcast()">配信終了</button>
                 </div>
                 
                 <video id="previewVideo" muted autoplay playsinline style="width: 100%; max-width: 400px; background: #000; border-radius: 8px;"></video>
-                <p style="font-size: 0.8rem; color: gray; margin-top:10px;">※OBSの映像を流す場合は、OBSで「仮想カメラ開始」を押し、ブラウザのカメラ許可設定で「OBS Virtual Camera」を選択してください。</p>
+                <p style="font-size: 0.8rem; color: gray; margin-top:10px;">注: OBSの映像を流す場合は、OBSで「仮想カメラ開始」を押し、ブラウザのカメラ許可設定で「OBS Virtual Camera」を選択してください。</p>
             </div>
         </div>
     </div>
@@ -272,10 +327,8 @@
         const PREFIX = 'takaneko-radio-2026-'; 
         let slots = JSON.parse(localStorage.getItem('takaneko_slots')) || [];
         
-        // 配信者モードの永続化チェック
         let isBroadcasterAuthenticated = localStorage.getItem('takaneko_isBroadcaster') === 'true';
         
-        // P2P関連の変数
         let hostPeer = null;      
         let viewerPeer = null;    
         let localStream = null;
@@ -289,12 +342,10 @@
         let hostHasVideo = false; 
         let viewerWantsVideo = true; 
 
-        // --- 初期化処理 ---
         if (isBroadcasterAuthenticated) {
             document.getElementById('broadcasterTabs').classList.remove('hidden');
         }
 
-        // --- URLからの共有リンク受け取り処理 ---
         const urlParams = new URLSearchParams(window.location.search);
         const sharedSlotId = urlParams.get('watch');
         if (sharedSlotId) {
@@ -314,7 +365,6 @@
             setTimeout(() => watchSlot(sharedSlotId), 500);
         }
 
-        // --- ダークモード＆裏技(20回タップ) ---
         let toggleCount = 0;
         let toggleTimer = null;
         document.getElementById('themeToggleBtn').addEventListener('click', () => {
@@ -335,7 +385,14 @@
             if (document.getElementById('secretPassword').value === 'takanekokonneko') {
                 isBroadcasterAuthenticated = true;
                 localStorage.setItem('takaneko_isBroadcaster', 'true'); 
-                document.getElementById('broadcasterTabs').classList.remove('hidden');
+                const tabs = document.getElementById('broadcasterTabs');
+                tabs.classList.remove('hidden');
+                
+                // 再アニメーションのためにクラスをリセット
+                tabs.classList.remove('fade-in');
+                void tabs.offsetWidth; // リフロー強制
+                tabs.classList.add('fade-in');
+                
                 alert('配信者モードが有効になりました。');
                 closeModal();
             } else {
@@ -348,23 +405,39 @@
             document.getElementById('passwordModal').classList.add('hidden');
         }
 
-        // --- モード切替 ---
         function switchMode(mode) {
-            document.getElementById('viewerUI').classList.toggle('hidden', mode !== 'viewer');
-            document.getElementById('broadcasterUI').classList.toggle('hidden', mode !== 'broadcaster');
-            document.getElementById('tabViewer').classList.toggle('active', mode === 'viewer');
-            document.getElementById('tabBroadcaster').classList.toggle('active', mode === 'broadcaster');
+            const viewerUI = document.getElementById('viewerUI');
+            const broadcasterUI = document.getElementById('broadcasterUI');
+            
+            if (mode === 'viewer') {
+                broadcasterUI.classList.add('hidden');
+                viewerUI.classList.remove('hidden');
+                document.getElementById('tabViewer').classList.add('active');
+                document.getElementById('tabBroadcaster').classList.remove('active');
+                
+                // アニメーションのリセット
+                viewerUI.classList.remove('fade-in');
+                void viewerUI.offsetWidth;
+                viewerUI.classList.add('fade-in');
+            } else {
+                viewerUI.classList.add('hidden');
+                broadcasterUI.classList.remove('hidden');
+                document.getElementById('tabViewer').classList.remove('active');
+                document.getElementById('tabBroadcaster').classList.add('active');
+                
+                // アニメーションのリセット
+                broadcasterUI.classList.remove('fade-in');
+                void broadcasterUI.offsetWidth;
+                broadcasterUI.classList.add('fade-in');
+            }
             renderSlots();
         }
 
-        // --- 配信枠の管理 ---
         function createSlot(isImmediate) {
             const title = document.getElementById('slotTitle').value;
             if (!title) { alert('タイトルを入力してください。'); return; }
 
             let timeToSet;
-
-            // 「今すぐ開始」の場合は現在時刻、そうでない場合は入力された日時を使用
             if (isImmediate) {
                 timeToSet = Date.now();
             } else {
@@ -383,7 +456,6 @@
             saveSlots();
             renderSlots();
             
-            // 入力欄をリセット
             document.getElementById('slotTitle').value = '';
             document.getElementById('slotDateTime').value = '';
         }
@@ -409,26 +481,28 @@
             });
         }
 
-        // --- 画面描画とカウントダウン ---
         function renderSlots() {
             const vList = document.getElementById('slotListViewer');
             const bList = document.getElementById('slotListBroadcaster');
             vList.innerHTML = '';
             bList.innerHTML = '';
 
-            // 枠が全くない場合の処理
             if (slots.length === 0) {
-                vList.innerHTML = '<div class="empty-message">現在、配信枠がありません。<br>配信されているURLを開き、枠を追加してください。</div>';
-                bList.innerHTML = '<div class="empty-message">管理中の枠はありません。上のフォームから作成してください。</div>';
+                vList.innerHTML = '<div class="empty-message fade-in">現在、配信枠がありません。<br>配信されているURLを開き、枠を追加してください。</div>';
+                bList.innerHTML = '<div class="empty-message fade-in">管理中の枠はありません。上のフォームから作成してください。</div>';
                 return;
             }
 
-            slots.forEach(slot => {
+            slots.forEach((slot, index) => {
                 const infoHtml = `<strong>${slot.title}</strong><br><small>${new Date(slot.time).toLocaleString()}</small><br><span class="countdown" id="cd-${slot.id}"></span>`;
                 
+                // アニメーションを少しずつずらす
+                const delay = `${index * 0.05}s`;
+
                 // 視聴者用UI構築
                 const vItem = document.createElement('div');
                 vItem.className = 'slot-item';
+                vItem.style.animationDelay = delay;
                 vItem.innerHTML = `<div>${infoHtml}</div>`;
                 if (slot.status !== 'ended') {
                     const vBtn = document.createElement('button');
@@ -441,18 +515,19 @@
                 // 配信者用UI構築
                 const bItem = document.createElement('div');
                 bItem.className = 'slot-item';
+                bItem.style.animationDelay = delay;
                 bItem.innerHTML = `<div>${infoHtml}</div>`;
                 
                 const btnGroup = document.createElement('div');
                 
                 const copyBtn = document.createElement('button');
-                copyBtn.innerText = '🔗 URL';
+                copyBtn.innerText = 'URLコピー';
                 copyBtn.className = 'success';
                 copyBtn.style.marginRight = '10px';
                 copyBtn.onclick = () => copyShareUrl(slot);
                 
                 const delBtn = document.createElement('button');
-                delBtn.innerText = '🗑 削除';
+                delBtn.innerText = '削除';
                 delBtn.className = 'danger';
                 delBtn.style.marginRight = '10px';
                 delBtn.onclick = () => deleteSlot(slot.id);
@@ -481,7 +556,7 @@
                 return; 
             }
             if (slot.status === 'live') {
-                element.innerText = ' 🔴 ラジオ配信中！';
+                element.innerText = ' ラジオ配信中！';
                 element.className = 'live-text';
                 element.style.color = ''; 
                 return;
@@ -519,7 +594,13 @@
             currentWatchingId = id;
             viewerWantsVideo = true; 
             
-            document.getElementById('playerCard').classList.remove('hidden');
+            const playerCard = document.getElementById('playerCard');
+            playerCard.classList.remove('hidden');
+            // アニメーションリセット
+            playerCard.classList.remove('slide-up');
+            void playerCard.offsetWidth;
+            playerCard.classList.add('slide-up');
+            
             document.getElementById('playerTitle').innerText = slot.title;
             const statusEl = document.getElementById('playerStatus');
             
@@ -551,9 +632,13 @@
                 const conn = viewerPeer.connect(targetHostId);
                 
                 conn.on('open', () => {
-                    document.getElementById('playerStatus').innerText = '🔴 配信を受信中...';
+                    document.getElementById('playerStatus').innerText = '配信を受信中...';
                     document.getElementById('playerCountdown').classList.add('hidden');
-                    document.getElementById('viewerControls').classList.remove('hidden');
+                    const controls = document.getElementById('viewerControls');
+                    controls.classList.remove('hidden');
+                    controls.classList.remove('fade-in');
+                    void controls.offsetWidth;
+                    controls.classList.add('fade-in');
                     
                     const slot = slots.find(s => s.id === slotId);
                     if (slot && slot.status !== 'live') {
@@ -615,19 +700,38 @@
             const a = document.getElementById('liveAudio');
 
             if (hostHasVideo) {
-                toggleUI.classList.remove('hidden');
+                if (toggleUI.classList.contains('hidden')) {
+                    toggleUI.classList.remove('hidden');
+                    toggleUI.classList.add('fade-in');
+                }
                 
                 if (viewerWantsVideo) {
-                    v.classList.remove('hidden');
+                    if(v.classList.contains('hidden')) {
+                        v.classList.remove('hidden');
+                        // Video表示時のアニメーション
+                        v.style.animation = 'none';
+                        void v.offsetWidth;
+                        v.style.animation = 'fadeIn 0.5s ease-out';
+                    }
                     a.classList.add('hidden');
                 } else {
                     v.classList.add('hidden');
-                    a.classList.remove('hidden');
+                    if(a.classList.contains('hidden')) {
+                        a.classList.remove('hidden');
+                        a.style.animation = 'none';
+                        void a.offsetWidth;
+                        a.style.animation = 'fadeIn 0.5s ease-out';
+                    }
                 }
             } else {
                 toggleUI.classList.add('hidden');
                 v.classList.add('hidden');
-                a.classList.remove('hidden');
+                if(a.classList.contains('hidden')) {
+                    a.classList.remove('hidden');
+                    a.style.animation = 'none';
+                    void a.offsetWidth;
+                    a.style.animation = 'fadeIn 0.5s ease-out';
+                }
             }
         }
 
@@ -666,7 +770,12 @@
                 saveSlots();
                 renderSlots();
                 
-                document.getElementById('broadcastControls').classList.remove('hidden');
+                const bControls = document.getElementById('broadcastControls');
+                bControls.classList.remove('hidden');
+                bControls.classList.remove('slide-up');
+                void bControls.offsetWidth;
+                bControls.classList.add('slide-up');
+                
                 document.getElementById('activeSlotTitle').innerText = '配信中: ' + slot.title;
                 document.getElementById('viewerCount').innerText = '0';
 
@@ -702,7 +811,7 @@
             if (track) {
                 isMicOn = !isMicOn;
                 track.enabled = isMicOn;
-                document.getElementById('btnMic').innerText = isMicOn ? '🎤 マイクOFF' : '🎤 マイクON';
+                document.getElementById('btnMic').innerText = isMicOn ? 'マイク OFF' : 'マイク ON';
                 document.getElementById('btnMic').style.backgroundColor = isMicOn ? '#ef4444' : 'var(--primary-color)';
             }
         }
@@ -713,7 +822,7 @@
             if (track) {
                 isVideoOn = !isVideoOn;
                 track.enabled = isVideoOn;
-                document.getElementById('btnVideo').innerText = isVideoOn ? '📺 映像(OBS) OFF' : '📺 映像(OBS) ON';
+                document.getElementById('btnVideo').innerText = isVideoOn ? '映像(OBS) OFF' : '映像(OBS) ON';
                 document.getElementById('btnVideo').style.backgroundColor = isVideoOn ? '#ef4444' : 'var(--primary-color)';
                 
                 activeConnections.forEach(conn => {
