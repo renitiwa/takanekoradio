@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>たかねこラジオ</title>
-    <!-- P2P通信用のライブラリ（PeerJS）を読み込み -->
+    <!-- P2P通信用のライブラリ（PeerJS） -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         /* カスタムフォントの読み込み */
@@ -21,6 +21,7 @@
             --primary-hover: #2563eb;
             --border-color: #e5e7eb;
             --danger-color: #ef4444;
+            --danger-hover: #dc2626;
             --success-color: #10b981;
         }
 
@@ -66,6 +67,7 @@
         }
         button:hover { background-color: var(--primary-hover); }
         button.danger { background-color: var(--danger-color); }
+        button.danger:hover { background-color: var(--danger-hover); }
         button.success { background-color: var(--success-color); }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -122,6 +124,13 @@
         }
         .slot-item:last-child { border-bottom: none; }
         .countdown { font-weight: bold; color: var(--primary-color); }
+        .live-text { font-weight: bold; color: var(--danger-color); animation: blink 1.5s infinite; }
+        
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
 
         /* プレイヤー */
         #mediaPlayerContainer {
@@ -131,6 +140,7 @@
             overflow: hidden;
             margin-top: 1rem;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             min-height: 50px;
@@ -190,7 +200,11 @@
                 
                 <!-- 視聴者用コントロール -->
                 <div id="viewerControls" class="hidden" style="margin-top: 10px;">
-                    <p style="font-size: 0.8rem; color: gray;">※P2P生放送のため「巻き戻し」はできませんが、プレイヤーの標準機能で音量調整や一時停止が可能です。</p>
+                    <div id="viewerMediaToggle" class="hidden" style="margin-bottom: 10px; padding: 10px; background: var(--bg-color); border-radius: 4px;">
+                        <p style="margin: 0 0 5px 0; font-size: 0.9rem;">この配信は映像があります。再生方法を選んでください：</p>
+                        <button id="btnWatchVideo" onclick="setViewerPreference('video')" class="active">📺 映像＋音声で視聴</button>
+                        <button id="btnWatchAudio" onclick="setViewerPreference('audio')">🎧 音声のみで視聴(通信量節約)</button>
+                    </div>
                     <button class="danger" onclick="stopWatching()">視聴をやめる</button>
                 </div>
             </div>
@@ -241,20 +255,30 @@
 
     <script>
         // --- 基本設定と状態管理 ---
-        const PREFIX = 'takaneko-radio-2026-'; // PeerIDの衝突防止用
+        const PREFIX = 'takaneko-radio-2026-'; 
         let slots = JSON.parse(localStorage.getItem('takaneko_slots')) || [];
-        let isBroadcasterAuthenticated = false;
+        
+        // 配信者モードの永続化チェック
+        let isBroadcasterAuthenticated = localStorage.getItem('takaneko_isBroadcaster') === 'true';
         
         // P2P関連の変数
-        let hostPeer = null;      // 配信者用のPeer
-        let viewerPeer = null;    // 視聴者用のPeer
+        let hostPeer = null;      
+        let viewerPeer = null;    
         let localStream = null;
-        let activeConnections = []; // 視聴者とのデータコネクション
+        let activeConnections = []; 
+        let currentRemoteStream = null; // 視聴者側で受け取っているストリーム
         
         let isMicOn = false;
         let isVideoOn = false;
         let currentWatchingId = null;
         let retryTimeout = null;
+        let hostHasVideo = false; // 配信者が映像を送っているか
+        let viewerWantsVideo = true; // 視聴者が映像を望んでいるか
+
+        // --- 初期化処理 ---
+        if (isBroadcasterAuthenticated) {
+            document.getElementById('broadcasterTabs').classList.remove('hidden');
+        }
 
         // --- URLからの共有リンク受け取り処理 ---
         const urlParams = new URLSearchParams(window.location.search);
@@ -263,7 +287,6 @@
             const sharedTitle = urlParams.get('title') || '共有された配信';
             const sharedTime = urlParams.get('time') || Date.now();
             
-            // 自分の端末に枠が存在しなければ追加する
             if (!slots.find(s => s.id === sharedSlotId)) {
                 slots.push({
                     id: sharedSlotId,
@@ -273,9 +296,7 @@
                 });
                 saveSlots();
             }
-            // URLパラメータを消してスッキリさせる（任意）
             window.history.replaceState({}, document.title, window.location.pathname);
-            // 自動で視聴画面を開く
             setTimeout(() => watchSlot(sharedSlotId), 500);
         }
 
@@ -299,6 +320,7 @@
         function checkPassword() {
             if (document.getElementById('secretPassword').value === 'takanekokonneko') {
                 isBroadcasterAuthenticated = true;
+                localStorage.setItem('takaneko_isBroadcaster', 'true'); // 状態を保存
                 document.getElementById('broadcasterTabs').classList.remove('hidden');
                 alert('配信者モードが有効になりました。');
                 closeModal();
@@ -335,6 +357,16 @@
             });
             saveSlots();
             renderSlots();
+            document.getElementById('slotTitle').value = '';
+            document.getElementById('slotDateTime').value = '';
+        }
+
+        function deleteSlot(id) {
+            if (confirm('本当にこの枠を削除しますか？')) {
+                slots = slots.filter(s => s.id !== id);
+                saveSlots();
+                renderSlots();
+            }
         }
 
         function saveSlots() {
@@ -378,18 +410,26 @@
                 bItem.innerHTML = `<div>${infoHtml}</div>`;
                 
                 const btnGroup = document.createElement('div');
+                
                 const copyBtn = document.createElement('button');
-                copyBtn.innerText = '🔗 URLコピー';
+                copyBtn.innerText = '🔗 URL';
                 copyBtn.className = 'success';
                 copyBtn.style.marginRight = '10px';
                 copyBtn.onclick = () => copyShareUrl(slot);
                 
+                const delBtn = document.createElement('button');
+                delBtn.innerText = '🗑 削除';
+                delBtn.className = 'danger';
+                delBtn.style.marginRight = '10px';
+                delBtn.onclick = () => deleteSlot(slot.id);
+
                 const bBtn = document.createElement('button');
                 bBtn.innerText = slot.status === 'live' ? '配信中...' : (slot.status === 'ended' ? '終了済み' : '配信開始');
                 if(slot.status === 'ended' || slot.status === 'live') bBtn.disabled = true;
                 bBtn.onclick = () => startBroadcast(slot.id);
 
                 btnGroup.appendChild(copyBtn);
+                btnGroup.appendChild(delBtn);
                 btnGroup.appendChild(bBtn);
                 bItem.appendChild(btnGroup);
                 bList.appendChild(bItem);
@@ -400,7 +440,18 @@
 
         function updateCountdownText(slot, element) {
             if (!element) return;
-            if (slot.status === 'ended') { element.innerText = ' [配信終了しました]'; element.style.color = 'gray'; return; }
+            if (slot.status === 'ended') { 
+                element.innerText = ' [配信終了しました]'; 
+                element.className = 'countdown';
+                element.style.color = 'gray'; 
+                return; 
+            }
+            if (slot.status === 'live') {
+                element.innerText = ' 🔴 ラジオ配信中！';
+                element.className = 'live-text';
+                element.style.color = ''; // クラスに依存
+                return;
+            }
             
             const diff = slot.time - Date.now();
             if (diff > 0) {
@@ -408,9 +459,11 @@
                 const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
                 const s = Math.floor((diff % (1000 * 60)) / 1000);
                 element.innerText = ` 開始まで: ${h}時間 ${m}分 ${s}秒`;
+                element.className = 'countdown';
                 element.style.color = 'var(--primary-color)';
             } else {
                 element.innerText = ' 開始時間を過ぎています (待機中)';
+                element.className = 'countdown';
                 element.style.color = 'var(--primary-color)';
             }
         }
@@ -430,6 +483,7 @@
         function watchSlot(id) {
             const slot = slots.find(s => s.id === id);
             currentWatchingId = id;
+            viewerWantsVideo = true; // デフォルトは映像あり
             
             document.getElementById('playerCard').classList.remove('hidden');
             document.getElementById('playerTitle').innerText = slot.title;
@@ -438,6 +492,7 @@
             document.getElementById('liveVideo').classList.add('hidden');
             document.getElementById('liveAudio').classList.add('hidden');
             document.getElementById('viewerControls').classList.add('hidden');
+            document.getElementById('viewerMediaToggle').classList.add('hidden');
             
             if (slot.status === 'ended') {
                 statusEl.innerText = '配信終了しました';
@@ -455,43 +510,54 @@
             if (viewerPeer) viewerPeer.destroy();
             clearTimeout(retryTimeout);
 
-            // 視聴者用のPeer（IDはランダム自動生成）
             viewerPeer = new Peer();
 
             viewerPeer.on('open', () => {
                 const targetHostId = PREFIX + slotId;
-                
-                // 配信者に「接続要求（データ通信）」を送る
                 const conn = viewerPeer.connect(targetHostId);
                 
                 conn.on('open', () => {
-                    // 接続成功！配信者がオンライン
                     document.getElementById('playerStatus').innerText = '🔴 配信を受信中...';
                     document.getElementById('playerCountdown').classList.add('hidden');
                     document.getElementById('viewerControls').classList.remove('hidden');
+                    
+                    // 配信者側の枠ステータスを自分側にも同期させる
+                    const slot = slots.find(s => s.id === slotId);
+                    if (slot && slot.status !== 'live') {
+                        slot.status = 'live';
+                        saveSlots();
+                        renderSlots();
+                    }
                 });
 
-                // 配信者からの指示（映像のON/OFFや配信終了）を受け取る
                 conn.on('data', data => {
                     if (data.type === 'video_state') {
-                        updateMediaMode(data.state);
+                        hostHasVideo = data.state;
+                        applyViewerMediaSettings();
                     } else if (data.type === 'ended') {
                         document.getElementById('playerStatus').innerText = '配信終了しました';
                         stopWatchingMedia();
+                        
+                        const slot = slots.find(s => s.id === slotId);
+                        if (slot) {
+                            slot.status = 'ended';
+                            saveSlots();
+                            renderSlots();
+                        }
                     }
                 });
             });
 
-            // 配信者から映像/音声が送られてきた時の処理
             viewerPeer.on('call', call => {
-                call.answer(); // 自分の映像は送らずに電話に出る
+                call.answer();
                 call.on('stream', remoteStream => {
+                    currentRemoteStream = remoteStream;
                     document.getElementById('liveVideo').srcObject = remoteStream;
                     document.getElementById('liveAudio').srcObject = remoteStream;
+                    applyViewerMediaSettings();
                 });
             });
 
-            // 配信者がまだP2Pサーバーを立ち上げていない（オフライン）場合は再試行
             viewerPeer.on('error', err => {
                 if (err.type === 'peer-unavailable') {
                     retryTimeout = setTimeout(() => {
@@ -501,14 +567,36 @@
             });
         }
 
-        // 映像/音声の即時UI切り替え
-        function updateMediaMode(hasVideo) {
+        // 視聴者が「映像＋音声」か「音声のみ」かを選ぶ関数
+        function setViewerPreference(pref) {
+            viewerWantsVideo = (pref === 'video');
+            
+            document.getElementById('btnWatchVideo').style.opacity = viewerWantsVideo ? '1' : '0.5';
+            document.getElementById('btnWatchAudio').style.opacity = !viewerWantsVideo ? '1' : '0.5';
+            
+            applyViewerMediaSettings();
+        }
+
+        // 配信者の状態(hostHasVideo)と視聴者の希望(viewerWantsVideo)から最適な表示を決定
+        function applyViewerMediaSettings() {
+            const toggleUI = document.getElementById('viewerMediaToggle');
             const v = document.getElementById('liveVideo');
             const a = document.getElementById('liveAudio');
-            if (hasVideo) {
-                v.classList.remove('hidden');
-                a.classList.add('hidden');
+
+            if (hostHasVideo) {
+                // 配信者が映像を送っている場合、選択UIを表示
+                toggleUI.classList.remove('hidden');
+                
+                if (viewerWantsVideo) {
+                    v.classList.remove('hidden');
+                    a.classList.add('hidden');
+                } else {
+                    v.classList.add('hidden');
+                    a.classList.remove('hidden');
+                }
             } else {
+                // 配信者が音声のみ（ラジオ）の場合、選択UIを隠す
+                toggleUI.classList.add('hidden');
                 v.classList.add('hidden');
                 a.classList.remove('hidden');
             }
@@ -536,10 +624,8 @@
             const slot = slots.find(s => s.id === id);
             
             try {
-                // まずマイクとカメラの権限を取得
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
                 
-                // 初期は両方OFFにしておく
                 localStream.getAudioTracks().forEach(t => t.enabled = false);
                 localStream.getVideoTracks().forEach(t => t.enabled = false);
                 isMicOn = false;
@@ -547,7 +633,6 @@
                 
                 document.getElementById('previewVideo').srcObject = localStream;
                 
-                // 配信状態を保存
                 slot.status = 'live';
                 saveSlots();
                 renderSlots();
@@ -556,19 +641,16 @@
                 document.getElementById('activeSlotTitle').innerText = '配信中: ' + slot.title;
                 document.getElementById('viewerCount').innerText = '0';
 
-                // PeerJS サーバーの立ち上げ（固定IDを使用）
                 if (hostPeer) hostPeer.destroy();
                 const hostId = PREFIX + id;
                 hostPeer = new Peer(hostId);
                 activeConnections = [];
 
-                // 視聴者からの接続要求を待つ
                 hostPeer.on('connection', conn => {
                     activeConnections.push(conn);
                     document.getElementById('viewerCount').innerText = activeConnections.length;
 
                     conn.on('open', () => {
-                        // 接続してきた視聴者に、現在の映像ON/OFF状態を教える
                         conn.send({ type: 'video_state', state: isVideoOn });
                     });
 
@@ -577,7 +659,6 @@
                         document.getElementById('viewerCount').innerText = activeConnections.length;
                     });
 
-                    // 接続してきた視聴者に映像/音声ストリームを発信(Call)する
                     hostPeer.call(conn.peer, localStream);
                 });
 
@@ -606,7 +687,6 @@
                 document.getElementById('btnVideo').innerText = isVideoOn ? '📺 映像(OBS) OFF' : '📺 映像(OBS) ON';
                 document.getElementById('btnVideo').style.backgroundColor = isVideoOn ? '#ef4444' : 'var(--primary-color)';
                 
-                // 全ての視聴者に映像のON/OFFが切り替わったことを通知（視聴側のUIを自動でAudio/Videoに切り替えさせる）
                 activeConnections.forEach(conn => {
                     conn.send({ type: 'video_state', state: isVideoOn });
                 });
@@ -614,7 +694,6 @@
         }
 
         function endBroadcast() {
-            // 視聴者に終了を通知
             activeConnections.forEach(conn => conn.send({ type: 'ended' }));
             
             if (hostPeer) {
@@ -628,7 +707,6 @@
             
             document.getElementById('broadcastControls').classList.add('hidden');
             
-            // 枠のステータスを更新
             slots = slots.map(s => {
                 if(s.status === 'live') s.status = 'ended';
                 return s;
