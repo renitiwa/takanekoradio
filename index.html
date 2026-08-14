@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>たかねこラジオ</title>
+    <!-- P2P通信用のライブラリ（PeerJS）を読み込み -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        /* カスタムフォントの読み込み */
+        @font-face {
+            font-family: 'KeiFont';
+            src: url('keifont.ttf') format('truetype');
+        }
+
+        :root {
+            --bg-color: #f4f4f5;
+            --text-color: #333333;
+            --card-bg: #ffffff;
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --border-color: #e5e7eb;
+            --danger-color: #ef4444;
+            --success-color: #10b981;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --card-bg: #1e1e1e;
+            --primary-color: #60a5fa;
+            --primary-hover: #3b82f6;
+            --border-color: #333333;
+        }
+
+        body {
+            font-family: 'KeiFont', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2rem;
+            background-color: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 { margin: 0; font-size: 1.5rem; }
+
+        button {
+            font-family: 'KeiFont', sans-serif;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 1rem;
+        }
+        button:hover { background-color: var(--primary-hover); }
+        button.danger { background-color: var(--danger-color); }
+        button.success { background-color: var(--success-color); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .hidden { display: none !important; }
+
+        /* モーダル */
+        .modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: var(--card-bg);
+            padding: 2rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .modal-content input {
+            font-family: 'KeiFont', sans-serif;
+            padding: 0.5rem;
+            font-size: 1rem;
+            margin: 1rem 0;
+            width: 80%;
+        }
+
+        /* 配信枠リスト */
+        .slot-item {
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .slot-item:last-child { border-bottom: none; }
+        .countdown { font-weight: bold; color: var(--primary-color); }
+
+        /* プレイヤー */
+        #mediaPlayerContainer {
+            width: 100%;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 1rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 50px;
+        }
+        video, audio { width: 100%; display: block; }
+        
+        .nav-tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .nav-tabs button {
+            background: transparent;
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+        }
+        .nav-tabs button.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>たかねこラジオ</h1>
+        <div>
+            <button id="themeToggleBtn">🌙 ダークモード切替</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- 配信者用タブ -->
+        <div id="broadcasterTabs" class="nav-tabs hidden">
+            <button id="tabViewer" class="active" onclick="switchMode('viewer')">視聴モード</button>
+            <button id="tabBroadcaster" onclick="switchMode('broadcaster')">配信モード</button>
+        </div>
+
+        <!-- ================= 視聴モードUI ================= -->
+        <div id="viewerUI">
+            <div class="card">
+                <h2>配信予定 / 配信中</h2>
+                <div id="slotListViewer"></div>
+            </div>
+
+            <div id="playerCard" class="card hidden">
+                <h2 id="playerTitle">配信タイトル</h2>
+                <div id="playerCountdown" class="countdown hidden"></div>
+                
+                <p id="playerStatus" style="margin-top: 10px; font-weight: bold; color: var(--primary-color);"></p>
+                
+                <div id="mediaPlayerContainer">
+                    <video id="liveVideo" controls autoplay playsinline class="hidden"></video>
+                    <audio id="liveAudio" controls autoplay class="hidden"></audio>
+                </div>
+                
+                <!-- 視聴者用コントロール -->
+                <div id="viewerControls" class="hidden" style="margin-top: 10px;">
+                    <p style="font-size: 0.8rem; color: gray;">※P2P生放送のため「巻き戻し」はできませんが、プレイヤーの標準機能で音量調整や一時停止が可能です。</p>
+                    <button class="danger" onclick="stopWatching()">視聴をやめる</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= 配信モードUI ================= -->
+        <div id="broadcasterUI" class="hidden">
+            <div class="card">
+                <h2>新しい配信枠を作成</h2>
+                <input type="text" id="slotTitle" placeholder="配信タイトル" style="font-family: inherit; padding: 5px; width: 60%; margin-right: 10px;">
+                <input type="datetime-local" id="slotDateTime" style="font-family: inherit; padding: 5px;">
+                <button onclick="createSlot()" style="margin-top: 10px;">枠を作成</button>
+            </div>
+
+            <div class="card">
+                <h2>管理中の枠</h2>
+                <div id="slotListBroadcaster"></div>
+            </div>
+
+            <!-- 配信コントロール -->
+            <div id="broadcastControls" class="card hidden">
+                <h2 id="activeSlotTitle">配信中: </h2>
+                <p>現在 <span id="viewerCount" style="font-weight: bold; color: var(--primary-color);">0</span> 人が視聴中</p>
+                
+                <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
+                    <button id="btnMic" onclick="toggleMic()">🎤 マイクON</button>
+                    <button id="btnVideo" onclick="toggleVideo()">📺 映像(OBS) ON</button>
+                    <button class="danger" onclick="endBroadcast()">⏹ 配信終了</button>
+                </div>
+                
+                <video id="previewVideo" muted autoplay playsinline style="width: 100%; max-width: 400px; background: #000; border-radius: 8px;"></video>
+                <p style="font-size: 0.8rem; color: gray; margin-top:10px;">※OBSの映像を流す場合は、OBSで「仮想カメラ開始」を押し、ブラウザのカメラ許可設定で「OBS Virtual Camera」を選択してください。</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 隠しパスワードモーダル -->
+    <div id="passwordModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>配信者モードを有効化</h2>
+            <p>パスワードを入力してください</p>
+            <input type="password" id="secretPassword">
+            <br>
+            <button onclick="checkPassword()">認証</button>
+            <button onclick="closeModal()" class="danger" style="margin-left: 10px;">キャンセル</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 基本設定と状態管理 ---
+        const PREFIX = 'takaneko-radio-2026-'; // PeerIDの衝突防止用
+        let slots = JSON.parse(localStorage.getItem('takaneko_slots')) || [];
+        let isBroadcasterAuthenticated = false;
+        
+        // P2P関連の変数
+        let hostPeer = null;      // 配信者用のPeer
+        let viewerPeer = null;    // 視聴者用のPeer
+        let localStream = null;
+        let activeConnections = []; // 視聴者とのデータコネクション
+        
+        let isMicOn = false;
+        let isVideoOn = false;
+        let currentWatchingId = null;
+        let retryTimeout = null;
+
+        // --- URLからの共有リンク受け取り処理 ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const sharedSlotId = urlParams.get('watch');
+        if (sharedSlotId) {
+            const sharedTitle = urlParams.get('title') || '共有された配信';
+            const sharedTime = urlParams.get('time') || Date.now();
+            
+            // 自分の端末に枠が存在しなければ追加する
+            if (!slots.find(s => s.id === sharedSlotId)) {
+                slots.push({
+                    id: sharedSlotId,
+                    title: sharedTitle,
+                    time: parseInt(sharedTime),
+                    status: 'waiting'
+                });
+                saveSlots();
+            }
+            // URLパラメータを消してスッキリさせる（任意）
+            window.history.replaceState({}, document.title, window.location.pathname);
+            // 自動で視聴画面を開く
+            setTimeout(() => watchSlot(sharedSlotId), 500);
+        }
+
+        // --- ダークモード＆裏技(20回タップ) ---
+        let toggleCount = 0;
+        let toggleTimer = null;
+        document.getElementById('themeToggleBtn').addEventListener('click', () => {
+            const isDark = document.body.getAttribute('data-theme') === 'dark';
+            document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+
+            toggleCount++;
+            clearTimeout(toggleTimer);
+            toggleTimer = setTimeout(() => { toggleCount = 0; }, 2000);
+
+            if (toggleCount >= 20 && !isBroadcasterAuthenticated) {
+                document.getElementById('passwordModal').classList.remove('hidden');
+                toggleCount = 0;
+            }
+        });
+
+        function checkPassword() {
+            if (document.getElementById('secretPassword').value === 'takanekokonneko') {
+                isBroadcasterAuthenticated = true;
+                document.getElementById('broadcasterTabs').classList.remove('hidden');
+                alert('配信者モードが有効になりました。');
+                closeModal();
+            } else {
+                alert('パスワードが違います。');
+            }
+            document.getElementById('secretPassword').value = '';
+        }
+
+        function closeModal() {
+            document.getElementById('passwordModal').classList.add('hidden');
+        }
+
+        // --- モード切替 ---
+        function switchMode(mode) {
+            document.getElementById('viewerUI').classList.toggle('hidden', mode !== 'viewer');
+            document.getElementById('broadcasterUI').classList.toggle('hidden', mode !== 'broadcaster');
+            document.getElementById('tabViewer').classList.toggle('active', mode === 'viewer');
+            document.getElementById('tabBroadcaster').classList.toggle('active', mode === 'broadcaster');
+            renderSlots();
+        }
+
+        // --- 配信枠の管理 ---
+        function createSlot() {
+            const title = document.getElementById('slotTitle').value;
+            const dt = document.getElementById('slotDateTime').value;
+            if (!title || !dt) { alert('タイトルと日時を入力してください。'); return; }
+
+            slots.push({
+                id: Date.now().toString(),
+                title: title,
+                time: new Date(dt).getTime(),
+                status: 'waiting'
+            });
+            saveSlots();
+            renderSlots();
+        }
+
+        function saveSlots() {
+            localStorage.setItem('takaneko_slots', JSON.stringify(slots));
+        }
+
+        function copyShareUrl(slot) {
+            const url = `${window.location.origin}${window.location.pathname}?watch=${slot.id}&title=${encodeURIComponent(slot.title)}&time=${slot.time}`;
+            navigator.clipboard.writeText(url).then(() => {
+                alert('視聴用のURLをコピーしました！視聴者に教えてあげてください。');
+            }).catch(err => {
+                alert('コピーに失敗しました。以下のURLを手動でコピーしてください。\n' + url);
+            });
+        }
+
+        // --- 画面描画とカウントダウン ---
+        function renderSlots() {
+            const vList = document.getElementById('slotListViewer');
+            const bList = document.getElementById('slotListBroadcaster');
+            vList.innerHTML = '';
+            bList.innerHTML = '';
+
+            slots.forEach(slot => {
+                const infoHtml = `<strong>${slot.title}</strong><br><small>${new Date(slot.time).toLocaleString()}</small><br><span class="countdown" id="cd-${slot.id}"></span>`;
+                
+                // 視聴者用UI構築
+                const vItem = document.createElement('div');
+                vItem.className = 'slot-item';
+                vItem.innerHTML = `<div>${infoHtml}</div>`;
+                if (slot.status !== 'ended') {
+                    const vBtn = document.createElement('button');
+                    vBtn.innerText = '視聴する';
+                    vBtn.onclick = () => watchSlot(slot.id);
+                    vItem.appendChild(vBtn);
+                }
+                vList.appendChild(vItem);
+
+                // 配信者用UI構築
+                const bItem = document.createElement('div');
+                bItem.className = 'slot-item';
+                bItem.innerHTML = `<div>${infoHtml}</div>`;
+                
+                const btnGroup = document.createElement('div');
+                const copyBtn = document.createElement('button');
+                copyBtn.innerText = '🔗 URLコピー';
+                copyBtn.className = 'success';
+                copyBtn.style.marginRight = '10px';
+                copyBtn.onclick = () => copyShareUrl(slot);
+                
+                const bBtn = document.createElement('button');
+                bBtn.innerText = slot.status === 'live' ? '配信中...' : (slot.status === 'ended' ? '終了済み' : '配信開始');
+                if(slot.status === 'ended' || slot.status === 'live') bBtn.disabled = true;
+                bBtn.onclick = () => startBroadcast(slot.id);
+
+                btnGroup.appendChild(copyBtn);
+                btnGroup.appendChild(bBtn);
+                bItem.appendChild(btnGroup);
+                bList.appendChild(bItem);
+
+                updateCountdownText(slot, document.querySelector(`#cd-${slot.id}`));
+            });
+        }
+
+        function updateCountdownText(slot, element) {
+            if (!element) return;
+            if (slot.status === 'ended') { element.innerText = ' [配信終了しました]'; element.style.color = 'gray'; return; }
+            
+            const diff = slot.time - Date.now();
+            if (diff > 0) {
+                const h = Math.floor(diff / (1000 * 60 * 60));
+                const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const s = Math.floor((diff % (1000 * 60)) / 1000);
+                element.innerText = ` 開始まで: ${h}時間 ${m}分 ${s}秒`;
+                element.style.color = 'var(--primary-color)';
+            } else {
+                element.innerText = ' 開始時間を過ぎています (待機中)';
+                element.style.color = 'var(--primary-color)';
+            }
+        }
+
+        setInterval(() => {
+            slots.forEach(slot => {
+                updateCountdownText(slot, document.querySelector(`#slotListViewer #cd-${slot.id}`));
+                updateCountdownText(slot, document.querySelector(`#slotListBroadcaster #cd-${slot.id}`));
+                if (currentWatchingId === slot.id) updateCountdownText(slot, document.getElementById('playerCountdown'));
+            });
+        }, 1000);
+
+
+        // ==========================================
+        //         P2P 視聴者側のロジック
+        // ==========================================
+        function watchSlot(id) {
+            const slot = slots.find(s => s.id === id);
+            currentWatchingId = id;
+            
+            document.getElementById('playerCard').classList.remove('hidden');
+            document.getElementById('playerTitle').innerText = slot.title;
+            const statusEl = document.getElementById('playerStatus');
+            
+            document.getElementById('liveVideo').classList.add('hidden');
+            document.getElementById('liveAudio').classList.add('hidden');
+            document.getElementById('viewerControls').classList.add('hidden');
+            
+            if (slot.status === 'ended') {
+                statusEl.innerText = '配信終了しました';
+                document.getElementById('playerCountdown').classList.add('hidden');
+                return;
+            }
+
+            statusEl.innerText = '通信を確立しています... (配信開始待ち)';
+            document.getElementById('playerCountdown').classList.remove('hidden');
+            
+            connectToHostP2P(id);
+        }
+
+        function connectToHostP2P(slotId) {
+            if (viewerPeer) viewerPeer.destroy();
+            clearTimeout(retryTimeout);
+
+            // 視聴者用のPeer（IDはランダム自動生成）
+            viewerPeer = new Peer();
+
+            viewerPeer.on('open', () => {
+                const targetHostId = PREFIX + slotId;
+                
+                // 配信者に「接続要求（データ通信）」を送る
+                const conn = viewerPeer.connect(targetHostId);
+                
+                conn.on('open', () => {
+                    // 接続成功！配信者がオンライン
+                    document.getElementById('playerStatus').innerText = '🔴 配信を受信中...';
+                    document.getElementById('playerCountdown').classList.add('hidden');
+                    document.getElementById('viewerControls').classList.remove('hidden');
+                });
+
+                // 配信者からの指示（映像のON/OFFや配信終了）を受け取る
+                conn.on('data', data => {
+                    if (data.type === 'video_state') {
+                        updateMediaMode(data.state);
+                    } else if (data.type === 'ended') {
+                        document.getElementById('playerStatus').innerText = '配信終了しました';
+                        stopWatchingMedia();
+                    }
+                });
+            });
+
+            // 配信者から映像/音声が送られてきた時の処理
+            viewerPeer.on('call', call => {
+                call.answer(); // 自分の映像は送らずに電話に出る
+                call.on('stream', remoteStream => {
+                    document.getElementById('liveVideo').srcObject = remoteStream;
+                    document.getElementById('liveAudio').srcObject = remoteStream;
+                });
+            });
+
+            // 配信者がまだP2Pサーバーを立ち上げていない（オフライン）場合は再試行
+            viewerPeer.on('error', err => {
+                if (err.type === 'peer-unavailable') {
+                    retryTimeout = setTimeout(() => {
+                        if(currentWatchingId === slotId) connectToHostP2P(slotId);
+                    }, 3000);
+                }
+            });
+        }
+
+        // 映像/音声の即時UI切り替え
+        function updateMediaMode(hasVideo) {
+            const v = document.getElementById('liveVideo');
+            const a = document.getElementById('liveAudio');
+            if (hasVideo) {
+                v.classList.remove('hidden');
+                a.classList.add('hidden');
+            } else {
+                v.classList.add('hidden');
+                a.classList.remove('hidden');
+            }
+        }
+
+        function stopWatching() {
+            currentWatchingId = null;
+            clearTimeout(retryTimeout);
+            stopWatchingMedia();
+            document.getElementById('playerCard').classList.add('hidden');
+        }
+
+        function stopWatchingMedia() {
+            if (viewerPeer) viewerPeer.destroy();
+            document.getElementById('liveVideo').srcObject = null;
+            document.getElementById('liveAudio').srcObject = null;
+            document.getElementById('viewerControls').classList.add('hidden');
+        }
+
+
+        // ==========================================
+        //         P2P 配信者側のロジック
+        // ==========================================
+        async function startBroadcast(id) {
+            const slot = slots.find(s => s.id === id);
+            
+            try {
+                // まずマイクとカメラの権限を取得
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                
+                // 初期は両方OFFにしておく
+                localStream.getAudioTracks().forEach(t => t.enabled = false);
+                localStream.getVideoTracks().forEach(t => t.enabled = false);
+                isMicOn = false;
+                isVideoOn = false;
+                
+                document.getElementById('previewVideo').srcObject = localStream;
+                
+                // 配信状態を保存
+                slot.status = 'live';
+                saveSlots();
+                renderSlots();
+                
+                document.getElementById('broadcastControls').classList.remove('hidden');
+                document.getElementById('activeSlotTitle').innerText = '配信中: ' + slot.title;
+                document.getElementById('viewerCount').innerText = '0';
+
+                // PeerJS サーバーの立ち上げ（固定IDを使用）
+                if (hostPeer) hostPeer.destroy();
+                const hostId = PREFIX + id;
+                hostPeer = new Peer(hostId);
+                activeConnections = [];
+
+                // 視聴者からの接続要求を待つ
+                hostPeer.on('connection', conn => {
+                    activeConnections.push(conn);
+                    document.getElementById('viewerCount').innerText = activeConnections.length;
+
+                    conn.on('open', () => {
+                        // 接続してきた視聴者に、現在の映像ON/OFF状態を教える
+                        conn.send({ type: 'video_state', state: isVideoOn });
+                    });
+
+                    conn.on('close', () => {
+                        activeConnections = activeConnections.filter(c => c !== conn);
+                        document.getElementById('viewerCount').innerText = activeConnections.length;
+                    });
+
+                    // 接続してきた視聴者に映像/音声ストリームを発信(Call)する
+                    hostPeer.call(conn.peer, localStream);
+                });
+
+            } catch (err) {
+                alert('カメラまたはマイクの取得に失敗しました。\nOBSの「仮想カメラ」が開始されているか、ブラウザの権限を確認してください。\n詳細: ' + err.message);
+            }
+        }
+
+        function toggleMic() {
+            if (!localStream) return;
+            const track = localStream.getAudioTracks()[0];
+            if (track) {
+                isMicOn = !isMicOn;
+                track.enabled = isMicOn;
+                document.getElementById('btnMic').innerText = isMicOn ? '🎤 マイクOFF' : '🎤 マイクON';
+                document.getElementById('btnMic').style.backgroundColor = isMicOn ? '#ef4444' : 'var(--primary-color)';
+            }
+        }
+
+        function toggleVideo() {
+            if (!localStream) return;
+            const track = localStream.getVideoTracks()[0];
+            if (track) {
+                isVideoOn = !isVideoOn;
+                track.enabled = isVideoOn;
+                document.getElementById('btnVideo').innerText = isVideoOn ? '📺 映像(OBS) OFF' : '📺 映像(OBS) ON';
+                document.getElementById('btnVideo').style.backgroundColor = isVideoOn ? '#ef4444' : 'var(--primary-color)';
+                
+                // 全ての視聴者に映像のON/OFFが切り替わったことを通知（視聴側のUIを自動でAudio/Videoに切り替えさせる）
+                activeConnections.forEach(conn => {
+                    conn.send({ type: 'video_state', state: isVideoOn });
+                });
+            }
+        }
+
+        function endBroadcast() {
+            // 視聴者に終了を通知
+            activeConnections.forEach(conn => conn.send({ type: 'ended' }));
+            
+            if (hostPeer) {
+                hostPeer.destroy();
+                hostPeer = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            document.getElementById('broadcastControls').classList.add('hidden');
+            
+            // 枠のステータスを更新
+            slots = slots.map(s => {
+                if(s.status === 'live') s.status = 'ended';
+                return s;
+            });
+            saveSlots();
+            renderSlots();
+            alert('配信を終了しました。');
+        }
+
+        // 初期表示
+        renderSlots();
+
+    </script>
+</body>
+</html>
