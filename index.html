@@ -23,6 +23,7 @@
             --danger-color: #ef4444;
             --danger-hover: #dc2626;
             --success-color: #10b981;
+            --success-hover: #059669;
         }
 
         [data-theme="dark"] {
@@ -69,6 +70,7 @@
         button.danger { background-color: var(--danger-color); }
         button.danger:hover { background-color: var(--danger-hover); }
         button.success { background-color: var(--success-color); }
+        button.success:hover { background-color: var(--success-hover); }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
 
         .container {
@@ -126,6 +128,13 @@
         .countdown { font-weight: bold; color: var(--primary-color); }
         .live-text { font-weight: bold; color: var(--danger-color); animation: blink 1.5s infinite; }
         
+        .empty-message {
+            text-align: center;
+            color: gray;
+            padding: 2rem 1rem;
+            line-height: 1.6;
+        }
+
         @keyframes blink {
             0% { opacity: 1; }
             50% { opacity: 0.5; }
@@ -214,9 +223,14 @@
         <div id="broadcasterUI" class="hidden">
             <div class="card">
                 <h2>新しい配信枠を作成</h2>
-                <input type="text" id="slotTitle" placeholder="配信タイトル" style="font-family: inherit; padding: 5px; width: 60%; margin-right: 10px;">
-                <input type="datetime-local" id="slotDateTime" style="font-family: inherit; padding: 5px;">
-                <button onclick="createSlot()" style="margin-top: 10px;">枠を作成</button>
+                <div style="margin-bottom: 10px;">
+                    <input type="text" id="slotTitle" placeholder="配信タイトル" style="font-family: inherit; padding: 5px; width: 100%; box-sizing: border-box; margin-bottom: 10px;">
+                    <input type="datetime-local" id="slotDateTime" style="font-family: inherit; padding: 5px;">
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button onclick="createSlot(false)">予定枠を作成</button>
+                    <button onclick="createSlot(true)" class="success">今すぐ配信する枠を作成</button>
+                </div>
             </div>
 
             <div class="card">
@@ -266,14 +280,14 @@
         let viewerPeer = null;    
         let localStream = null;
         let activeConnections = []; 
-        let currentRemoteStream = null; // 視聴者側で受け取っているストリーム
+        let currentRemoteStream = null; 
         
         let isMicOn = false;
         let isVideoOn = false;
         let currentWatchingId = null;
         let retryTimeout = null;
-        let hostHasVideo = false; // 配信者が映像を送っているか
-        let viewerWantsVideo = true; // 視聴者が映像を望んでいるか
+        let hostHasVideo = false; 
+        let viewerWantsVideo = true; 
 
         // --- 初期化処理 ---
         if (isBroadcasterAuthenticated) {
@@ -320,7 +334,7 @@
         function checkPassword() {
             if (document.getElementById('secretPassword').value === 'takanekokonneko') {
                 isBroadcasterAuthenticated = true;
-                localStorage.setItem('takaneko_isBroadcaster', 'true'); // 状態を保存
+                localStorage.setItem('takaneko_isBroadcaster', 'true'); 
                 document.getElementById('broadcasterTabs').classList.remove('hidden');
                 alert('配信者モードが有効になりました。');
                 closeModal();
@@ -344,19 +358,32 @@
         }
 
         // --- 配信枠の管理 ---
-        function createSlot() {
+        function createSlot(isImmediate) {
             const title = document.getElementById('slotTitle').value;
-            const dt = document.getElementById('slotDateTime').value;
-            if (!title || !dt) { alert('タイトルと日時を入力してください。'); return; }
+            if (!title) { alert('タイトルを入力してください。'); return; }
+
+            let timeToSet;
+
+            // 「今すぐ開始」の場合は現在時刻、そうでない場合は入力された日時を使用
+            if (isImmediate) {
+                timeToSet = Date.now();
+            } else {
+                const dt = document.getElementById('slotDateTime').value;
+                if (!dt) { alert('日時を入力してください。（もしくは「今すぐ配信する枠を作成」を選んでください）'); return; }
+                timeToSet = new Date(dt).getTime();
+            }
 
             slots.push({
                 id: Date.now().toString(),
                 title: title,
-                time: new Date(dt).getTime(),
+                time: timeToSet,
                 status: 'waiting'
             });
+            
             saveSlots();
             renderSlots();
+            
+            // 入力欄をリセット
             document.getElementById('slotTitle').value = '';
             document.getElementById('slotDateTime').value = '';
         }
@@ -388,6 +415,13 @@
             const bList = document.getElementById('slotListBroadcaster');
             vList.innerHTML = '';
             bList.innerHTML = '';
+
+            // 枠が全くない場合の処理
+            if (slots.length === 0) {
+                vList.innerHTML = '<div class="empty-message">現在、配信枠がありません。<br>配信されているURLを開き、枠を追加してください。</div>';
+                bList.innerHTML = '<div class="empty-message">管理中の枠はありません。上のフォームから作成してください。</div>';
+                return;
+            }
 
             slots.forEach(slot => {
                 const infoHtml = `<strong>${slot.title}</strong><br><small>${new Date(slot.time).toLocaleString()}</small><br><span class="countdown" id="cd-${slot.id}"></span>`;
@@ -449,7 +483,7 @@
             if (slot.status === 'live') {
                 element.innerText = ' 🔴 ラジオ配信中！';
                 element.className = 'live-text';
-                element.style.color = ''; // クラスに依存
+                element.style.color = ''; 
                 return;
             }
             
@@ -483,7 +517,7 @@
         function watchSlot(id) {
             const slot = slots.find(s => s.id === id);
             currentWatchingId = id;
-            viewerWantsVideo = true; // デフォルトは映像あり
+            viewerWantsVideo = true; 
             
             document.getElementById('playerCard').classList.remove('hidden');
             document.getElementById('playerTitle').innerText = slot.title;
@@ -521,7 +555,6 @@
                     document.getElementById('playerCountdown').classList.add('hidden');
                     document.getElementById('viewerControls').classList.remove('hidden');
                     
-                    // 配信者側の枠ステータスを自分側にも同期させる
                     const slot = slots.find(s => s.id === slotId);
                     if (slot && slot.status !== 'live') {
                         slot.status = 'live';
@@ -567,7 +600,6 @@
             });
         }
 
-        // 視聴者が「映像＋音声」か「音声のみ」かを選ぶ関数
         function setViewerPreference(pref) {
             viewerWantsVideo = (pref === 'video');
             
@@ -577,14 +609,12 @@
             applyViewerMediaSettings();
         }
 
-        // 配信者の状態(hostHasVideo)と視聴者の希望(viewerWantsVideo)から最適な表示を決定
         function applyViewerMediaSettings() {
             const toggleUI = document.getElementById('viewerMediaToggle');
             const v = document.getElementById('liveVideo');
             const a = document.getElementById('liveAudio');
 
             if (hostHasVideo) {
-                // 配信者が映像を送っている場合、選択UIを表示
                 toggleUI.classList.remove('hidden');
                 
                 if (viewerWantsVideo) {
@@ -595,7 +625,6 @@
                     a.classList.remove('hidden');
                 }
             } else {
-                // 配信者が音声のみ（ラジオ）の場合、選択UIを隠す
                 toggleUI.classList.add('hidden');
                 v.classList.add('hidden');
                 a.classList.remove('hidden');
