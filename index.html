@@ -4,10 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>たかねこラジオ</title>
-    <!-- P2P通信用のライブラリ（PeerJS） -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        /* カスタムフォントの読み込み */
         @font-face {
             font-family: 'KeiFont';
             src: url('keifont.ttf') format('truetype');
@@ -84,14 +82,8 @@
             padding: 0 1rem;
         }
 
-        /* アニメーション用の基本クラス */
-        .fade-in {
-            animation: fadeIn 0.4s ease-out forwards;
-        }
-        
-        .slide-up {
-            animation: slideUp 0.4s ease-out forwards;
-        }
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        .slide-up { animation: slideUp 0.4s ease-out forwards; }
 
         @keyframes fadeIn {
             from { opacity: 0; }
@@ -113,11 +105,8 @@
             transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
         }
 
-        .hidden { 
-            display: none !important; 
-        }
+        .hidden { display: none !important; }
 
-        /* モーダル */
         .modal {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -149,7 +138,6 @@
             color: var(--text-color);
         }
 
-        /* 配信枠リスト */
         .slot-item {
             border-bottom: 1px solid var(--border-color);
             padding: 1rem 0;
@@ -178,7 +166,6 @@
             100% { opacity: 1; }
         }
 
-        /* プレイヤー */
         #mediaPlayerContainer {
             width: 100%;
             background: #000;
@@ -215,7 +202,6 @@
             border-color: var(--primary-color);
         }
         
-        /* フォーム要素 */
         input[type="text"], input[type="datetime-local"], select {
             border: 1px solid var(--border-color);
             border-radius: 4px;
@@ -229,10 +215,21 @@
             box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
         }
 
+        .device-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+        .device-group label {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
         select {
             padding: 0.5rem;
             width: 100%;
-            margin-bottom: 1rem;
             box-sizing: border-box;
             appearance: none;
             -webkit-appearance: none;
@@ -271,11 +268,9 @@
                 <div id="slotListViewer"></div>
             </div>
 
-            <!-- 視聴プレイヤーカード -->
             <div id="playerCard" class="card hidden slide-up">
                 <div style="display: flex; justify-content: space-between; align-items: start;">
                     <h2 id="playerTitle" style="margin-top: 0;">配信タイトル</h2>
-                    <!-- 常に表示される「視聴をやめる」ボタン -->
                     <button class="danger" onclick="stopWatching()" style="font-size: 0.8rem; padding: 0.3rem 0.6rem;">閉じる / 視聴をやめる</button>
                 </div>
                 
@@ -288,7 +283,6 @@
                     <audio id="liveAudio" controls autoplay class="hidden"></audio>
                 </div>
                 
-                <!-- 映像/音声切替コントロール -->
                 <div id="viewerControls" class="hidden fade-in" style="margin-top: 10px;">
                     <div id="viewerMediaToggle" class="hidden" style="margin-bottom: 10px; padding: 10px; background: var(--bg-color); border-radius: 4px; transition: background-color 0.3s ease;">
                         <p style="margin: 0 0 5px 0; font-size: 0.9rem;">この配信は映像があります。再生方法を選んでください：</p>
@@ -301,16 +295,40 @@
 
         <!-- ================= 配信モードUI ================= -->
         <div id="broadcasterUI" class="hidden fade-in">
-            <!-- デバイス設定エリア -->
+            
             <div class="card slide-up">
-                <h2>配信設定</h2>
-                <p style="margin-top: 0; font-size: 0.9rem; color: gray;">配信に使用するマイクを選んでください。（リストが出ない場合は「許可」ボタンを押してください）</p>
-                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
-                     <button onclick="requestDevicePermissions()" class="success" id="btnRequestPerm">マイク/カメラを許可してリストを更新</button>
+                <h2>配信デバイス設定</h2>
+                <p style="margin-top: 0; font-size: 0.9rem; color: gray;">マイクと映像の入力先を設定します。リストが出ない場合は許可ボタンを押してください。</p>
+                <div style="margin-bottom: 15px;">
+                     <button onclick="requestDevicePermissions()" class="success" id="btnRequestPerm">マイクとカメラを許可してリストを更新</button>
                 </div>
-                <select id="micSelect">
-                    <option value="">マイクを選択してください...</option>
-                </select>
+
+                <div class="device-group">
+                    <label>映像デバイス (OBS Virtual Camera等)</label>
+                    <select id="videoSelect">
+                        <option value="">なし (ラジオモード / 音声のみ)</option>
+                    </select>
+                </div>
+                
+                <div class="device-group">
+                    <label>メイン音声 (マイク)</label>
+                    <select id="micSelect1">
+                        <option value="">マイクを選択してください...</option>
+                    </select>
+                </div>
+
+                <div class="device-group">
+                    <label>サブ音声 (BGM / OBS仮想オーディオ等)</label>
+                    <select id="micSelect2">
+                        <option value="">使用しない</option>
+                    </select>
+                </div>
+                
+                <div style="background-color: var(--bg-color); padding: 10px; border-radius: 4px; font-size: 0.8rem; color: gray;">
+                    <strong>配信スタイルの例：</strong><br>
+                    ・<strong>OBS映像＋音声</strong>：映像デバイスに「OBS Virtual Camera」、メイン音声に「マイク」を設定<br>
+                    ・<strong>映像なし＋複数音声の合成</strong>：映像デバイスを「なし」、メインとサブの両方に音声デバイスを設定（自動でミックスして配信されます）
+                </div>
             </div>
 
             <div class="card slide-up" style="animation-delay: 0.05s;">
@@ -336,13 +354,12 @@
                 <p>現在 <span id="viewerCount" style="font-weight: bold; color: var(--primary-color);">0</span> 人が視聴中</p>
                 
                 <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
-                    <button id="btnMic" onclick="toggleMic()">マイク OFF</button>
-                    <button id="btnVideo" onclick="toggleVideo()">映像(OBS) OFF</button>
+                    <button id="btnMic" onclick="toggleMic()">音声配信 OFF</button>
+                    <button id="btnVideo" onclick="toggleVideo()">映像配信 OFF</button>
                     <button class="danger" onclick="endBroadcast()">配信終了</button>
                 </div>
                 
                 <video id="previewVideo" muted autoplay playsinline style="width: 100%; max-width: 400px; background: #000; border-radius: 8px;"></video>
-                <p style="font-size: 0.8rem; color: gray; margin-top:10px;">注: OBSの映像を流す場合は、OBSで「仮想カメラ開始」を押し、ブラウザのカメラ許可設定で「OBS Virtual Camera」を選択してください。</p>
             </div>
         </div>
     </div>
@@ -363,7 +380,6 @@
         // --- 基本設定と状態管理 ---
         const PREFIX = 'takaneko-radio-2026-'; 
         let slots = JSON.parse(localStorage.getItem('takaneko_slots')) || [];
-        
         let isBroadcasterAuthenticated = localStorage.getItem('takaneko_isBroadcaster') === 'true';
         
         let hostPeer = null;      
@@ -378,6 +394,10 @@
         let retryTimeout = null;
         let hostHasVideo = false; 
         let viewerWantsVideo = true; 
+
+        // デバイスストリーム管理用
+        let activeUnderlyingStreams = [];
+        let audioContext = null;
 
         // 初期化時にテーマを復元
         const savedTheme = localStorage.getItem('takaneko_theme');
@@ -401,16 +421,13 @@
             }
         });
 
-        // ==========================================
         // URL共有処理 (自動視聴を廃止し、枠の追加のみ行う)
-        // ==========================================
         const urlParams = new URLSearchParams(window.location.search);
         const sharedSlotId = urlParams.get('watch');
         if (sharedSlotId) {
             const sharedTitle = urlParams.get('title') || '共有された配信';
             const sharedTime = urlParams.get('time') || Date.now();
             
-            // 枠が存在しなければ追加
             if (!slots.find(s => s.id === sharedSlotId)) {
                 slots.push({
                     id: sharedSlotId,
@@ -421,17 +438,10 @@
                 saveSlots();
             }
             
-            // URLパラメータを削除してスッキリさせる
             window.history.replaceState({}, document.title, window.location.pathname);
-            
-            // ※「自動で視聴画面を開く」処理 (watchSlot) は行わず、
-            // 追加された枠がリストに表示される状態（閉じた状態）で待機します。
             alert(`「${sharedTitle}」の配信枠を追加しました。リストから「視聴する」を選んでください。`);
         }
 
-        // ==========================================
-        // UI・その他操作関連
-        // ==========================================
         let toggleCount = 0;
         let toggleTimer = null;
         document.getElementById('themeToggleBtn').addEventListener('click', () => {
@@ -504,11 +514,11 @@
         }
 
         // ==========================================
-        //         デバイス（マイク）取得処理
+        //         デバイス取得処理 (映像・音声複数対応)
         // ==========================================
         async function requestDevicePermissions() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
                 stream.getTracks().forEach(track => track.stop());
                 
                 getConnectedDevices();
@@ -519,7 +529,7 @@
                 btn.disabled = true;
                 
             } catch (err) {
-                alert('マイクのアクセス許可が得られませんでした。\nブラウザの設定を確認してください。');
+                alert('アクセス許可が得られませんでした。ブラウザの設定を確認してください。');
                 console.error(err);
             }
         }
@@ -527,40 +537,52 @@
         async function getConnectedDevices() {
             try {
                 const devices = await navigator.mediaDevices.enumerateDevices();
-                const audioInputDevices = devices.filter(device => device.kind === 'audioinput');
+                const audioInputs = devices.filter(device => device.kind === 'audioinput');
+                const videoInputs = devices.filter(device => device.kind === 'videoinput');
                 
-                const micSelect = document.getElementById('micSelect');
-                const currentVal = micSelect.value;
+                const vSelect = document.getElementById('videoSelect');
+                const mSelect1 = document.getElementById('micSelect1');
+                const mSelect2 = document.getElementById('micSelect2');
                 
-                micSelect.innerHTML = ''; 
+                const curV = vSelect.value;
+                const curM1 = mSelect1.value;
+                const curM2 = mSelect2.value;
                 
-                if (audioInputDevices.length === 0) {
-                    const option = document.createElement('option');
-                    option.value = '';
-                    option.text = 'マイクが見つかりません';
-                    micSelect.appendChild(option);
-                    return;
-                }
-
-                audioInputDevices.forEach((device, index) => {
+                vSelect.innerHTML = '<option value="">なし (ラジオモード / 音声のみ)</option>'; 
+                mSelect1.innerHTML = '<option value="">マイクを選択してください...</option>';
+                mSelect2.innerHTML = '<option value="">使用しない</option>';
+                
+                videoInputs.forEach((device, index) => {
                     const option = document.createElement('option');
                     option.value = device.deviceId;
-                    option.text = device.label || `マイク ${index + 1}`;
-                    micSelect.appendChild(option);
+                    option.text = device.label || `カメラ ${index + 1}`;
+                    vSelect.appendChild(option);
+                });
+
+                audioInputs.forEach((device, index) => {
+                    const label = device.label || `マイク ${index + 1}`;
+                    
+                    const opt1 = document.createElement('option');
+                    opt1.value = device.deviceId;
+                    opt1.text = label;
+                    mSelect1.appendChild(opt1);
+
+                    const opt2 = document.createElement('option');
+                    opt2.value = device.deviceId;
+                    opt2.text = label;
+                    mSelect2.appendChild(opt2);
                 });
                 
-                if (currentVal && Array.from(micSelect.options).some(opt => opt.value === currentVal)) {
-                    micSelect.value = currentVal;
-                }
+                if (curV && Array.from(vSelect.options).some(opt => opt.value === curV)) vSelect.value = curV;
+                if (curM1 && Array.from(mSelect1.options).some(opt => opt.value === curM1)) mSelect1.value = curM1;
+                if (curM2 && Array.from(mSelect2.options).some(opt => opt.value === curM2)) mSelect2.value = curM2;
 
             } catch (err) {
                 console.error('デバイスの取得に失敗:', err);
             }
         }
         
-        navigator.mediaDevices.ondevicechange = (event) => {
-            getConnectedDevices();
-        }
+        navigator.mediaDevices.ondevicechange = () => { getConnectedDevices(); };
 
         // ==========================================
         // 枠の管理
@@ -594,11 +616,9 @@
 
         function deleteSlot(id) {
             if (confirm('本当にこの枠を削除しますか？')) {
-                // もし削除対象が現在視聴中の枠なら、視聴を停止する
                 if (currentWatchingId === id) {
                     stopWatching();
                 }
-                
                 slots = slots.filter(s => s.id !== id);
                 saveSlots();
                 renderSlots();
@@ -634,7 +654,6 @@
                 const infoHtml = `<strong>${slot.title}</strong><br><small>${new Date(slot.time).toLocaleString()}</small><br><span class="countdown" id="cd-${slot.id}"></span>`;
                 const delay = `${index * 0.05}s`;
 
-                // --- 視聴者用UI構築 ---
                 const vItem = document.createElement('div');
                 vItem.className = 'slot-item';
                 vItem.style.animationDelay = delay;
@@ -647,7 +666,6 @@
                 if (slot.status !== 'ended') {
                     const vBtn = document.createElement('button');
                     vBtn.innerText = '視聴する';
-                    // 視聴ボタンクリックで展開
                     vBtn.onclick = () => watchSlot(slot.id);
                     vBtnGroup.appendChild(vBtn);
                 }
@@ -662,7 +680,6 @@
                 vItem.appendChild(vBtnGroup);
                 vList.appendChild(vItem);
 
-                // --- 配信者用UI構築 ---
                 const bItem = document.createElement('div');
                 bItem.className = 'slot-item';
                 bItem.style.animationDelay = delay;
@@ -740,7 +757,6 @@
         //         P2P 視聴者側のロジック
         // ==========================================
         function watchSlot(id) {
-            // 他の枠を視聴中なら一度閉じる
             if (currentWatchingId && currentWatchingId !== id) {
                 stopWatching();
             }
@@ -808,7 +824,7 @@
                         applyViewerMediaSettings();
                     } else if (data.type === 'ended') {
                         document.getElementById('playerStatus').innerText = '配信終了しました';
-                        stopWatchingMedia(); // 通信は切るが、プレイヤーUIは「終了」として残す
+                        stopWatchingMedia(); 
                         
                         const slot = slots.find(s => s.id === slotId);
                         if (slot) {
@@ -833,7 +849,6 @@
             viewerPeer.on('error', err => {
                 if (err.type === 'peer-unavailable') {
                     retryTimeout = setTimeout(() => {
-                        // 視聴をやめていなければ再試行
                         if(currentWatchingId === slotId) connectToHostP2P(slotId);
                     }, 3000);
                 }
@@ -846,7 +861,6 @@
         setInterval(() => {
             const isViewerMode = document.getElementById('tabViewer').classList.contains('active');
             
-            // 視聴モードであり、現在まだプレイヤー画面を開いていない場合のみ監視
             if (isViewerMode && !currentWatchingId) {
                 slots.forEach(slot => {
                     if (slot.status === 'waiting') {
@@ -865,10 +879,7 @@
                     slot.status = 'live';
                     saveSlots();
                     renderSlots();
-                    
-                    // 配信が開始されたので、自動的に視聴画面を開く
                     watchSlot(slot.id);
-                    
                     conn.close();
                     checkerPeer.destroy();
                 });
@@ -930,7 +941,6 @@
             }
         }
 
-        // 視聴を完全に停止し、プレイヤーを閉じる
         function stopWatching() {
             currentWatchingId = null;
             clearTimeout(retryTimeout);
@@ -938,7 +948,6 @@
             document.getElementById('playerCard').classList.add('hidden');
         }
 
-        // メディアと通信だけを止める（UIは残す場合用）
         function stopWatchingMedia() {
             if (viewerPeer) viewerPeer.destroy();
             document.getElementById('liveVideo').srcObject = null;
@@ -946,21 +955,55 @@
             document.getElementById('viewerControls').classList.add('hidden');
         }
 
-
         // ==========================================
         //         P2P 配信者側のロジック
         // ==========================================
         async function startBroadcast(id) {
             const slot = slots.find(s => s.id === id);
-            const selectedMicId = document.getElementById('micSelect').value;
+            
+            const vidId = document.getElementById('videoSelect').value;
+            const mic1Id = document.getElementById('micSelect1').value;
+            const mic2Id = document.getElementById('micSelect2').value;
+            
+            if (!vidId && !mic1Id && !mic2Id) {
+                alert('少なくとも1つの映像または音声デバイスを選択してください。');
+                return;
+            }
+
+            activeUnderlyingStreams = [];
+            let combinedTracks = [];
             
             try {
-                const constraints = {
-                    video: true,
-                    audio: selectedMicId ? { deviceId: { exact: selectedMicId } } : true
-                };
+                // 1. 映像デバイスの取得
+                if (vidId) {
+                    const vStream = await navigator.mediaDevices.getUserMedia({video: {deviceId: {exact: vidId}}});
+                    combinedTracks.push(vStream.getVideoTracks()[0]);
+                    activeUnderlyingStreams.push(vStream);
+                }
+
+                // 2. 音声デバイスの取得とミキシング (Web Audio API)
+                if (mic1Id || mic2Id) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const dest = audioContext.createMediaStreamDestination();
+
+                    if (mic1Id) {
+                        const aStream1 = await navigator.mediaDevices.getUserMedia({audio: {deviceId: {exact: mic1Id}}});
+                        const src1 = audioContext.createMediaStreamSource(aStream1);
+                        src1.connect(dest);
+                        activeUnderlyingStreams.push(aStream1);
+                    }
+                    if (mic2Id) {
+                        const aStream2 = await navigator.mediaDevices.getUserMedia({audio: {deviceId: {exact: mic2Id}}});
+                        const src2 = audioContext.createMediaStreamSource(aStream2);
+                        src2.connect(dest);
+                        activeUnderlyingStreams.push(aStream2);
+                    }
+                    
+                    // 合成された音声トラックをまとめる
+                    combinedTracks.push(dest.stream.getAudioTracks()[0]);
+                }
                 
-                localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                localStream = new MediaStream(combinedTracks);
                 
                 // 初期状態OFF
                 localStream.getAudioTracks().forEach(t => t.enabled = false);
@@ -970,6 +1013,27 @@
                 
                 document.getElementById('previewVideo').srcObject = localStream;
                 
+                // 映像デバイスが選択されているかチェックし、UIを適応
+                const btnVideo = document.getElementById('btnVideo');
+                if (!vidId) {
+                    btnVideo.disabled = true;
+                    btnVideo.innerText = '映像なし';
+                } else {
+                    btnVideo.disabled = false;
+                    btnVideo.innerText = '映像配信 OFF';
+                    btnVideo.style.backgroundColor = 'var(--primary-color)';
+                }
+
+                const btnMic = document.getElementById('btnMic');
+                if (!mic1Id && !mic2Id) {
+                    btnMic.disabled = true;
+                    btnMic.innerText = '音声なし';
+                } else {
+                    btnMic.disabled = false;
+                    btnMic.innerText = '音声配信 OFF';
+                    btnMic.style.backgroundColor = 'var(--primary-color)';
+                }
+
                 slot.status = 'live';
                 saveSlots();
                 renderSlots();
@@ -1016,23 +1080,28 @@
 
         function toggleMic() {
             if (!localStream) return;
-            const track = localStream.getAudioTracks()[0];
-            if (track) {
+            // ミックスされた音声の出力トラックをミュート切替する
+            const audioTracks = localStream.getAudioTracks();
+            if (audioTracks.length > 0) {
                 isMicOn = !isMicOn;
-                track.enabled = isMicOn;
-                document.getElementById('btnMic').innerText = isMicOn ? 'マイク OFF' : 'マイク ON';
-                document.getElementById('btnMic').style.backgroundColor = isMicOn ? '#ef4444' : 'var(--primary-color)';
+                audioTracks.forEach(track => track.enabled = isMicOn);
+                
+                const btnMic = document.getElementById('btnMic');
+                btnMic.innerText = isMicOn ? '音声配信 OFF' : '音声配信 ON';
+                btnMic.style.backgroundColor = isMicOn ? '#ef4444' : 'var(--primary-color)';
             }
         }
 
         function toggleVideo() {
             if (!localStream) return;
-            const track = localStream.getVideoTracks()[0];
-            if (track) {
+            const videoTracks = localStream.getVideoTracks();
+            if (videoTracks.length > 0) {
                 isVideoOn = !isVideoOn;
-                track.enabled = isVideoOn;
-                document.getElementById('btnVideo').innerText = isVideoOn ? '映像(OBS) OFF' : '映像(OBS) ON';
-                document.getElementById('btnVideo').style.backgroundColor = isVideoOn ? '#ef4444' : 'var(--primary-color)';
+                videoTracks.forEach(track => track.enabled = isVideoOn);
+                
+                const btnVideo = document.getElementById('btnVideo');
+                btnVideo.innerText = isVideoOn ? '映像配信 OFF' : '映像配信 ON';
+                btnVideo.style.backgroundColor = isVideoOn ? '#ef4444' : 'var(--primary-color)';
                 
                 activeConnections.forEach(conn => {
                     conn.send({ type: 'video_state', state: isVideoOn });
@@ -1047,9 +1116,20 @@
                 hostPeer.destroy();
                 hostPeer = null;
             }
+            
+            // 全ての元のストリームを停止
+            activeUnderlyingStreams.forEach(stream => {
+                stream.getTracks().forEach(track => track.stop());
+            });
+            activeUnderlyingStreams = [];
+            
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
                 localStream = null;
+            }
+
+            if (audioContext && audioContext.state !== 'closed') {
+                audioContext.close();
             }
             
             document.getElementById('broadcastControls').classList.add('hidden');
