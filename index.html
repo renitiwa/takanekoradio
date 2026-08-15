@@ -22,6 +22,7 @@
             --danger-hover: #dc2626;
             --success-color: #10b981;
             --success-hover: #059669;
+            --warning-color: #f59e0b;
         }
 
         [data-theme="dark"] {
@@ -74,6 +75,7 @@
         button.danger:hover { background-color: var(--danger-hover); }
         button.success { background-color: var(--success-color); }
         button.success:hover { background-color: var(--success-hover); }
+        button.warning { background-color: var(--warning-color); }
         button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
         .container {
@@ -313,7 +315,7 @@
                 <div class="device-group">
                     <label>メイン音声 (マイク)</label>
                     <select id="micSelect1">
-                        <option value="">マイクを選択してください...</option>
+                        <option value="">使用しない</option>
                     </select>
                 </div>
 
@@ -326,8 +328,8 @@
                 
                 <div style="background-color: var(--bg-color); padding: 10px; border-radius: 4px; font-size: 0.8rem; color: gray;">
                     <strong>配信スタイルの例：</strong><br>
-                    ・<strong>OBS映像＋音声</strong>：映像デバイスに「OBS Virtual Camera」、メイン音声に「マイク」を設定<br>
-                    ・<strong>映像なし＋複数音声の合成</strong>：映像デバイスを「なし」、メインとサブの両方に音声デバイスを設定（自動でミックスして配信されます）
+                    ・<strong>OBS映像＋音声</strong>：映像に「OBS Virtual Camera」、メインに「マイク」を設定<br>
+                    ・<strong>映像なし＋複数音声の合成</strong>：映像を「なし」、メインとサブの両方を設定
                 </div>
             </div>
 
@@ -354,8 +356,9 @@
                 <p>現在 <span id="viewerCount" style="font-weight: bold; color: var(--primary-color);">0</span> 人が視聴中</p>
                 
                 <div style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
-                    <button id="btnMic" onclick="toggleMic()">音声配信 OFF</button>
                     <button id="btnVideo" onclick="toggleVideo()">映像配信 OFF</button>
+                    <button id="btnMic1" onclick="toggleMic1()">メイン音声 OFF</button>
+                    <button id="btnMic2" onclick="toggleMic2()">サブ音声 OFF</button>
                     <button class="danger" onclick="endBroadcast()">配信終了</button>
                 </div>
                 
@@ -388,15 +391,21 @@
         let activeConnections = []; 
         let currentRemoteStream = null; 
         
-        let isMicOn = false;
+        // メディア状態
         let isVideoOn = false;
+        let isMic1On = false;
+        let isMic2On = false;
+        
+        // 映像ONによるサブ音声の一時的なミュート状態を記憶するフラグ
+        let wasMic2OnBeforeVideo = false;
+
         let currentWatchingId = null;
         let retryTimeout = null;
         let hostHasVideo = false; 
         let viewerWantsVideo = true; 
 
         // デバイスストリーム管理用
-        let activeUnderlyingStreams = [];
+        let activeUnderlyingStreams = { video: null, mic1: null, mic2: null };
         let audioContext = null;
 
         // 初期化時にテーマを復元
@@ -549,7 +558,7 @@
                 const curM2 = mSelect2.value;
                 
                 vSelect.innerHTML = '<option value="">なし (ラジオモード / 音声のみ)</option>'; 
-                mSelect1.innerHTML = '<option value="">マイクを選択してください...</option>';
+                mSelect1.innerHTML = '<option value="">使用しない</option>';
                 mSelect2.innerHTML = '<option value="">使用しない</option>';
                 
                 videoInputs.forEach((device, index) => {
@@ -955,6 +964,7 @@
             document.getElementById('viewerControls').classList.add('hidden');
         }
 
+
         // ==========================================
         //         P2P 配信者側のロジック
         // ==========================================
@@ -970,50 +980,56 @@
                 return;
             }
 
-            activeUnderlyingStreams = [];
+            activeUnderlyingStreams = { video: null, mic1: null, mic2: null };
             let combinedTracks = [];
             
             try {
                 // 1. 映像デバイスの取得
                 if (vidId) {
                     const vStream = await navigator.mediaDevices.getUserMedia({video: {deviceId: {exact: vidId}}});
+                    activeUnderlyingStreams.video = vStream;
                     combinedTracks.push(vStream.getVideoTracks()[0]);
-                    activeUnderlyingStreams.push(vStream);
+                    isVideoOn = false; // 初期状態OFF
                 }
 
-                // 2. 音声デバイスの取得とミキシング (Web Audio API)
+                // 2. 音声デバイスの取得とミキシング
                 if (mic1Id || mic2Id) {
                     audioContext = new (window.AudioContext || window.webkitAudioContext)();
                     const dest = audioContext.createMediaStreamDestination();
 
                     if (mic1Id) {
                         const aStream1 = await navigator.mediaDevices.getUserMedia({audio: {deviceId: {exact: mic1Id}}});
+                        activeUnderlyingStreams.mic1 = aStream1;
                         const src1 = audioContext.createMediaStreamSource(aStream1);
                         src1.connect(dest);
-                        activeUnderlyingStreams.push(aStream1);
+                        isMic1On = false; // 初期状態OFF
                     }
                     if (mic2Id) {
                         const aStream2 = await navigator.mediaDevices.getUserMedia({audio: {deviceId: {exact: mic2Id}}});
+                        activeUnderlyingStreams.mic2 = aStream2;
                         const src2 = audioContext.createMediaStreamSource(aStream2);
                         src2.connect(dest);
-                        activeUnderlyingStreams.push(aStream2);
+                        isMic2On = false; // 初期状態OFF
                     }
                     
-                    // 合成された音声トラックをまとめる
                     combinedTracks.push(dest.stream.getAudioTracks()[0]);
                 }
                 
                 localStream = new MediaStream(combinedTracks);
                 
-                // 初期状態OFF
+                // 全トラックを一旦無効化
                 localStream.getAudioTracks().forEach(t => t.enabled = false);
                 localStream.getVideoTracks().forEach(t => t.enabled = false);
-                isMicOn = false;
-                isVideoOn = false;
+                // 個別ストリームも無効化
+                if(activeUnderlyingStreams.video) activeUnderlyingStreams.video.getTracks().forEach(t => t.enabled = false);
+                if(activeUnderlyingStreams.mic1) activeUnderlyingStreams.mic1.getTracks().forEach(t => t.enabled = false);
+                if(activeUnderlyingStreams.mic2) activeUnderlyingStreams.mic2.getTracks().forEach(t => t.enabled = false);
                 
+                wasMic2OnBeforeVideo = false;
+
                 document.getElementById('previewVideo').srcObject = localStream;
                 
-                // 映像デバイスが選択されているかチェックし、UIを適応
+                // ボタンの初期化
                 const btnVideo = document.getElementById('btnVideo');
                 if (!vidId) {
                     btnVideo.disabled = true;
@@ -1021,17 +1037,27 @@
                 } else {
                     btnVideo.disabled = false;
                     btnVideo.innerText = '映像配信 OFF';
-                    btnVideo.style.backgroundColor = 'var(--primary-color)';
+                    btnVideo.style.backgroundColor = 'var(--danger-color)';
                 }
 
-                const btnMic = document.getElementById('btnMic');
-                if (!mic1Id && !mic2Id) {
-                    btnMic.disabled = true;
-                    btnMic.innerText = '音声なし';
+                const btnMic1 = document.getElementById('btnMic1');
+                if (!mic1Id) {
+                    btnMic1.disabled = true;
+                    btnMic1.innerText = 'メイン音声なし';
                 } else {
-                    btnMic.disabled = false;
-                    btnMic.innerText = '音声配信 OFF';
-                    btnMic.style.backgroundColor = 'var(--primary-color)';
+                    btnMic1.disabled = false;
+                    btnMic1.innerText = 'メイン音声 OFF';
+                    btnMic1.style.backgroundColor = 'var(--danger-color)';
+                }
+
+                const btnMic2 = document.getElementById('btnMic2');
+                if (!mic2Id) {
+                    btnMic2.disabled = true;
+                    btnMic2.innerText = 'サブ音声なし';
+                } else {
+                    btnMic2.disabled = false;
+                    btnMic2.innerText = 'サブ音声 OFF';
+                    btnMic2.style.backgroundColor = 'var(--danger-color)';
                 }
 
                 slot.status = 'live';
@@ -1078,35 +1104,97 @@
             }
         }
 
-        function toggleMic() {
+        // ==========================================
+        //  個別デバイスのON/OFFロジック
+        // ==========================================
+        
+        // 全体のオーディオトラックの有効化を判定するヘルパー関数
+        function updateMainAudioTrack() {
             if (!localStream) return;
-            // ミックスされた音声の出力トラックをミュート切替する
             const audioTracks = localStream.getAudioTracks();
             if (audioTracks.length > 0) {
-                isMicOn = !isMicOn;
-                audioTracks.forEach(track => track.enabled = isMicOn);
-                
-                const btnMic = document.getElementById('btnMic');
-                btnMic.innerText = isMicOn ? '音声配信 OFF' : '音声配信 ON';
-                btnMic.style.backgroundColor = isMicOn ? '#ef4444' : 'var(--primary-color)';
+                // mic1かmic2のどちらかがONならメインオーディオもONにする
+                audioTracks[0].enabled = isMic1On || isMic2On;
             }
         }
 
-        function toggleVideo() {
-            if (!localStream) return;
-            const videoTracks = localStream.getVideoTracks();
-            if (videoTracks.length > 0) {
-                isVideoOn = !isVideoOn;
-                videoTracks.forEach(track => track.enabled = isVideoOn);
-                
-                const btnVideo = document.getElementById('btnVideo');
-                btnVideo.innerText = isVideoOn ? '映像配信 OFF' : '映像配信 ON';
-                btnVideo.style.backgroundColor = isVideoOn ? '#ef4444' : 'var(--primary-color)';
-                
-                activeConnections.forEach(conn => {
-                    conn.send({ type: 'video_state', state: isVideoOn });
-                });
+        function toggleMic1() {
+            if (!activeUnderlyingStreams.mic1) return;
+            isMic1On = !isMic1On;
+            activeUnderlyingStreams.mic1.getAudioTracks().forEach(t => t.enabled = isMic1On);
+            
+            const btn = document.getElementById('btnMic1');
+            btn.innerText = isMic1On ? 'メイン音声 ON' : 'メイン音声 OFF';
+            btn.style.backgroundColor = isMic1On ? 'var(--primary-color)' : 'var(--danger-color)';
+            
+            updateMainAudioTrack();
+        }
+
+        function toggleMic2() {
+            if (!activeUnderlyingStreams.mic2) return;
+            
+            // 映像がONのときは手動でサブ音声をONにできないようにする
+            if (isVideoOn && !isMic2On) {
+                alert("映像配信がONの時は、サブ音声(BGM等)をONにできません。");
+                return;
             }
+
+            isMic2On = !isMic2On;
+            activeUnderlyingStreams.mic2.getAudioTracks().forEach(t => t.enabled = isMic2On);
+            
+            const btn = document.getElementById('btnMic2');
+            btn.innerText = isMic2On ? 'サブ音声 ON' : 'サブ音声 OFF';
+            btn.style.backgroundColor = isMic2On ? 'var(--primary-color)' : 'var(--danger-color)';
+            
+            updateMainAudioTrack();
+        }
+
+        function toggleVideo() {
+            if (!activeUnderlyingStreams.video) return;
+            
+            isVideoOn = !isVideoOn;
+            activeUnderlyingStreams.video.getVideoTracks().forEach(t => t.enabled = isVideoOn);
+            
+            // メインストリームの映像トラックも更新
+            if (localStream) {
+                localStream.getVideoTracks().forEach(t => t.enabled = isVideoOn);
+            }
+            
+            const btn = document.getElementById('btnVideo');
+            btn.innerText = isVideoOn ? '映像配信 ON' : '映像配信 OFF';
+            btn.style.backgroundColor = isVideoOn ? 'var(--primary-color)' : 'var(--danger-color)';
+
+            // --- 映像とサブ音声の連動ロジック ---
+            if (isVideoOn) {
+                // 映像をONにした時、現在のサブ音声の状態を記憶し、強制OFFにする
+                wasMic2OnBeforeVideo = isMic2On;
+                if (isMic2On) {
+                    isMic2On = false;
+                    if(activeUnderlyingStreams.mic2){
+                        activeUnderlyingStreams.mic2.getAudioTracks().forEach(t => t.enabled = false);
+                    }
+                    const b = document.getElementById('btnMic2');
+                    b.innerText = 'サブ音声 OFF';
+                    b.style.backgroundColor = 'var(--danger-color)';
+                }
+            } else {
+                // 映像をOFFにした時、元々サブ音声がONだったなら戻す
+                if (wasMic2OnBeforeVideo) {
+                    isMic2On = true;
+                    if(activeUnderlyingStreams.mic2){
+                        activeUnderlyingStreams.mic2.getAudioTracks().forEach(t => t.enabled = true);
+                    }
+                    const b = document.getElementById('btnMic2');
+                    b.innerText = 'サブ音声 ON';
+                    b.style.backgroundColor = 'var(--primary-color)';
+                }
+            }
+            updateMainAudioTrack();
+            // ------------------------------------
+            
+            activeConnections.forEach(conn => {
+                conn.send({ type: 'video_state', state: isVideoOn });
+            });
         }
 
         function endBroadcast() {
@@ -1117,11 +1205,10 @@
                 hostPeer = null;
             }
             
-            // 全ての元のストリームを停止
-            activeUnderlyingStreams.forEach(stream => {
-                stream.getTracks().forEach(track => track.stop());
-            });
-            activeUnderlyingStreams = [];
+            if (activeUnderlyingStreams.video) activeUnderlyingStreams.video.getTracks().forEach(t => t.stop());
+            if (activeUnderlyingStreams.mic1) activeUnderlyingStreams.mic1.getTracks().forEach(t => t.stop());
+            if (activeUnderlyingStreams.mic2) activeUnderlyingStreams.mic2.getTracks().forEach(t => t.stop());
+            activeUnderlyingStreams = { video: null, mic1: null, mic2: null };
             
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
